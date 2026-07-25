@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { processRobokassaResult } from "@/server/services/order-service";
 
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 async function readPayload(request: Request) {
   if (request.method === "POST") {
     const form = await request.formData();

@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { orderSchema } from "@/lib/validation/order";
 import { createOrder } from "@/server/services/order-service";
 
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 export async function POST(request: Request) {
   const parsed = orderSchema.safeParse(await request.json());
   if (!parsed.success) {

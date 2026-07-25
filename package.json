@@ -2,16 +2,20 @@
   "name": "volchya-hvatka",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node .next/standalone/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --environment jsdom",
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "postinstall": "prisma generate",
     "brand:extract": "node scripts/extract-brand-assets.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

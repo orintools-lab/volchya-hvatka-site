@@ -8,6 +8,7 @@ const optionalPositiveInt = z.preprocess(
 
 const schema = z.object({
   DATABASE_URL: optionalString,
+  NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
   APP_URL: z.string().url().default("http://localhost:3000"),
   AUTH_SECRET: z.string().min(16).optional(),
   ADMIN_EMAIL: z.string().email().optional(),

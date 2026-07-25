@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { quoteSchema } from "@/lib/validation/order";
 import { createDeliveryQuote } from "@/server/services/delivery-service";
 
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 export async function POST(request: Request) {
   const parsed = quoteSchema.safeParse(await request.json());
   if (!parsed.success) {
