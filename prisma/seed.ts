@@ -67,18 +67,74 @@ async function main() {
 
   const content = [
     {
+      key: "hero.eyebrow",
+      section: "hero",
+      label: "Надзаголовок первого экрана",
+      value: "СОБСТВЕННОЕ ПРОИЗВОДСТВО • С 2015 ГОДА",
+      sortOrder: 5,
+    },
+    {
       key: "hero.title",
       section: "hero",
       label: "Заголовок первого экрана",
-      value: "Тренировочные шашки и видеокурсы по фланкировке",
+      value: "Тренировочные шашки\nи видеокурсы\nпо фланкировке",
       sortOrder: 10,
     },
     {
       key: "hero.subtitle",
       section: "hero",
       label: "Подзаголовок первого экрана",
-      value: "Собственное производство. Работаем с 2015 года.",
+      value: "Научитесь управлять шашкой свободно и уверенно. Пошаговые видеоуроки для любого уровня подготовки.",
       sortOrder: 20,
+    },
+    {
+      key: "hero.primaryButtonText",
+      section: "hero",
+      label: "Текст основной кнопки",
+      value: "Выбрать комплект",
+      sortOrder: 30,
+    },
+    {
+      key: "hero.primaryButtonTarget",
+      section: "hero",
+      label: "Ссылка основной кнопки",
+      value: "#products",
+      sortOrder: 40,
+    },
+    {
+      key: "hero.secondaryButtonText",
+      section: "hero",
+      label: "Текст второй кнопки",
+      value: "Смотреть видео",
+      sortOrder: 50,
+    },
+    {
+      key: "hero.secondaryButtonTarget",
+      section: "hero",
+      label: "Ссылка второй кнопки",
+      value: "#video",
+      sortOrder: 60,
+    },
+    {
+      key: "hero.imageUrl",
+      section: "hero",
+      label: "URL изображения",
+      value: "/images/hero-flankirovka.webp",
+      sortOrder: 70,
+    },
+    {
+      key: "hero.imageAlt",
+      section: "hero",
+      label: "Alt изображения",
+      value: "Фланкировка двумя тренировочными шашками на фоне гор",
+      sortOrder: 80,
+    },
+    {
+      key: "hero.visible",
+      section: "hero",
+      label: "Показывать первый экран",
+      value: true,
+      sortOrder: 90,
     },
     {
       key: "video.main",
@@ -98,7 +154,7 @@ async function main() {
   for (const block of content) {
     await prisma.contentBlock.upsert({
       where: { key: block.key },
-      update: {},
+      update: block,
       create: block,
     });
   }

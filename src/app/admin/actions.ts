@@ -78,8 +78,15 @@ export async function updateProduct(formData: FormData) {
 export async function updateContent(formData: FormData) {
   const admin = await requireAdmin();
   const entries = [
+    ["hero.eyebrow", "Надзаголовок первого экрана"],
     ["hero.title", "Заголовок первого экрана"],
     ["hero.subtitle", "Подзаголовок первого экрана"],
+    ["hero.primaryButtonText", "Текст основной кнопки"],
+    ["hero.primaryButtonTarget", "Ссылка основной кнопки"],
+    ["hero.secondaryButtonText", "Текст второй кнопки"],
+    ["hero.secondaryButtonTarget", "Ссылка второй кнопки"],
+    ["hero.imageUrl", "URL изображения"],
+    ["hero.imageAlt", "Alt изображения"],
   ] as const;
   for (const [key, label] of entries) {
     const value = String(formData.get(key) ?? "").trim();
@@ -90,8 +97,18 @@ export async function updateContent(formData: FormData) {
       create: { key, section: "hero", label, value },
     });
   }
+  await db.contentBlock.upsert({
+    where: { key: "hero.visible" },
+    update: { value: formData.get("hero.visible") === "on" },
+    create: {
+      key: "hero.visible",
+      section: "hero",
+      label: "Показывать первый экран",
+      value: formData.get("hero.visible") === "on",
+    },
+  });
   await db.auditLog.create({
-    data: { adminId: admin.id, action: "CONTENT_UPDATED", entity: "ContentBlock", after: { keys: entries.map(([key]) => key) } },
+    data: { adminId: admin.id, action: "CONTENT_UPDATED", entity: "ContentBlock", after: { keys: [...entries.map(([key]) => key), "hero.visible"] } },
   });
   revalidatePath("/");
   revalidatePath("/admin/content");

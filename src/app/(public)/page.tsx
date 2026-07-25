@@ -27,6 +27,10 @@ export default async function HomePage() {
     const value = contentMap.get(key);
     return typeof value === "string" ? value : fallback;
   };
+  const boolean = (key: string, fallback: boolean) => {
+    const value = contentMap.get(key);
+    return typeof value === "boolean" ? value : fallback;
+  };
   const serializedProducts = products.map((product) => ({
     id: product.id,
     name: product.name,
@@ -69,38 +73,77 @@ export default async function HomePage() {
           <a href="#video">Видео</a>
           <a href="#reviews">Отзывы</a>
           <a href="#faq">FAQ</a>
+          <a href="#contacts">Контакты</a>
         </nav>
         <a className="button button-small" href="#products">Выбрать комплект</a>
       </header>
 
       <main id="top">
-        <section className="hero section-dark">
-          <div className="hero-copy">
-            <p className="eyebrow">Собственное производство · с 2015 года</p>
-            <h1>{text("hero.title", "Тренировочные шашки и видеокурсы по фланкировке")}</h1>
-            <p className="lead">
-              {text("hero.subtitle", "Собственное производство. Работаем с 2015 года.")}
-            </p>
-            <div className="actions">
-              <a className="button" href="#products">Выбрать комплект</a>
-              <a className="button-secondary" href="#video">Смотреть видео</a>
+        {boolean("hero.visible", true) && (
+          <section className="hero">
+            <div className="hero-media">
+              <Image
+                src={text("hero.imageUrl", "/images/hero-flankirovka.webp")}
+                alt={text(
+                  "hero.imageAlt",
+                  "Фланкировка двумя тренировочными шашками на фоне гор",
+                )}
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 58vw"
+              />
             </div>
-          </div>
-          <div className="hero-mark" aria-hidden="true">
-            <Image src="/brand/symbol-gold.png" alt="" width={512} height={512} priority />
-          </div>
-        </section>
+            <div className="hero-copy">
+              <p className="eyebrow">
+                {text("hero.eyebrow", "СОБСТВЕННОЕ ПРОИЗВОДСТВО • С 2015 ГОДА")}
+              </p>
+              <h1>
+                {text(
+                  "hero.title",
+                  "Тренировочные шашки\nи видеокурсы\nпо фланкировке",
+                )
+                  .split("\n")
+                  .map((line, index) => (
+                    <span key={`${line}-${index}`}>{line}</span>
+                  ))}
+              </h1>
+              <p className="lead">
+                {text(
+                  "hero.subtitle",
+                  "Научитесь управлять шашкой свободно и уверенно. Пошаговые видеоуроки для любого уровня подготовки.",
+                )}
+              </p>
+              <div className="actions">
+                <a
+                  className="button"
+                  href={text("hero.primaryButtonTarget", "#products")}
+                >
+                  {text("hero.primaryButtonText", "Выбрать комплект")}
+                </a>
+                <a
+                  className="button-secondary"
+                  href={text("hero.secondaryButtonTarget", "#video")}
+                >
+                  {text("hero.secondaryButtonText", "Смотреть видео")}
+                </a>
+              </div>
+            </div>
 
-        <section className="trust" aria-label="О бренде">
-          {[
-            ["С 2015 года", "работаем с фланкировкой"],
-            ["25 000+", "продаж на маркетплейсах за 2 года"],
-            ["60 000+", "клиентов за всё время"],
-            ["18 600+", "участников сообщества VK"],
-          ].map(([value, label]) => (
-            <div key={value}><strong>{value}</strong><span>{label}</span></div>
-          ))}
-        </section>
+            <div className="hero-benefits" aria-label="Преимущества">
+              {[
+                ["◆", "Надёжные материалы", "Отборная древесина и ручная обработка"],
+                ["▶", "Пошаговые видеокурсы", "От базовых движений до уверенных связок"],
+                ["◎", "Для любого уровня", "Подойдёт новичкам и продолжающим"],
+                ["⌖", "Доставка по России", "Расчёт стоимости при оформлении"],
+              ].map(([icon, title, description]) => (
+                <div key={title}>
+                  <span aria-hidden="true">{icon}</span>
+                  <p><strong>{title}</strong><small>{description}</small></p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="section-light" id="products">
           <div className="section-heading">
@@ -188,7 +231,7 @@ export default async function HomePage() {
         )}
       </main>
 
-      <footer>
+      <footer id="contacts">
         <Image src="/brand/logo-white.png" alt="Волчья Хватка" width={640} height={540} />
         <p>Тренировочные шашки и обучение фланкировке с 2015 года.</p>
         <nav aria-label="Юридическая информация">
