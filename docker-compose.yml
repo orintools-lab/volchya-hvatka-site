@@ -1,0 +1,75 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: volchya_hvatka
+      POSTGRES_USER: volchya
+      POSTGRES_PASSWORD: volchya_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U volchya -d volchya_hvatka"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://volchya:volchya_local@db:5432/volchya_hvatka
+      APP_URL: http://localhost:3000
+      AUTH_SECRET: ${AUTH_SECRET:-replace-in-production}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      ROBOKASSA_MERCHANT_LOGIN: ${ROBOKASSA_MERCHANT_LOGIN:-}
+      ROBOKASSA_PASSWORD_1: ${ROBOKASSA_PASSWORD_1:-}
+      ROBOKASSA_PASSWORD_2: ${ROBOKASSA_PASSWORD_2:-}
+      ROBOKASSA_TEST_MODE: ${ROBOKASSA_TEST_MODE:-true}
+      ROBOKASSA_HASH_ALGORITHM: ${ROBOKASSA_HASH_ALGORITHM:-md5}
+      CDEK_CLIENT_ID: ${CDEK_CLIENT_ID:-}
+      CDEK_CLIENT_SECRET: ${CDEK_CLIENT_SECRET:-}
+      CDEK_API_URL: ${CDEK_API_URL:-https://api.edu.cdek.ru/v2}
+      CDEK_SENDER_CITY_CODE: ${CDEK_SENDER_CITY_CODE:-}
+      CDEK_DEFAULT_TARIFF_CODE: ${CDEK_DEFAULT_TARIFF_CODE:-}
+      CDEK_ACCOUNT_MODE: ${CDEK_ACCOUNT_MODE:-test}
+      DELIVERY_PROVIDERS: ${DELIVERY_PROVIDERS:-cdek}
+      UPLOAD_DIR: /app/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-8}
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+    environment:
+      DATABASE_URL: postgresql://volchya:volchya_local@db:5432/volchya_hvatka
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  postgres_data:
+  uploads_data:
