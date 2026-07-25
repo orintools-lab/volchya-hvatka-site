@@ -31,6 +31,22 @@ export default async function HomePage() {
     const value = contentMap.get(key);
     return typeof value === "boolean" ? value : fallback;
   };
+  const storedHeroTitle = text(
+    "hero.title",
+    "Тренировочные шашки\nи видеокурсы\nпо фланкировке",
+  );
+  const heroTitle = storedHeroTitle ===
+    "Тренировочные шашки и видеокурсы по фланкировке"
+    ? "Тренировочные шашки\nи видеокурсы\nпо фланкировке"
+    : storedHeroTitle;
+  const storedHeroSubtitle = text(
+    "hero.subtitle",
+    "Научитесь управлять шашкой свободно и уверенно. Пошаговые видеоуроки для любого уровня подготовки.",
+  );
+  const heroSubtitle = storedHeroSubtitle ===
+    "Собственное производство. Работаем с 2015 года."
+    ? "Научитесь управлять шашкой свободно и уверенно. Пошаговые видеоуроки для любого уровня подготовки."
+    : storedHeroSubtitle;
   const serializedProducts = products.map((product) => ({
     id: product.id,
     name: product.name,
@@ -98,21 +114,13 @@ export default async function HomePage() {
                 {text("hero.eyebrow", "СОБСТВЕННОЕ ПРОИЗВОДСТВО • С 2015 ГОДА")}
               </p>
               <h1>
-                {text(
-                  "hero.title",
-                  "Тренировочные шашки\nи видеокурсы\nпо фланкировке",
-                )
+                {heroTitle
                   .split("\n")
                   .map((line, index) => (
                     <span key={`${line}-${index}`}>{line}</span>
                   ))}
               </h1>
-              <p className="lead">
-                {text(
-                  "hero.subtitle",
-                  "Научитесь управлять шашкой свободно и уверенно. Пошаговые видеоуроки для любого уровня подготовки.",
-                )}
-              </p>
+              <p className="lead">{heroSubtitle}</p>
               <div className="actions">
                 <a
                   className="button"

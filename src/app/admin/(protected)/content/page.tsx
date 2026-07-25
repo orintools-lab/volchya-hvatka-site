@@ -8,6 +8,12 @@ export default async function ContentPage() {
   const values = new Map(blocks.map((block) => [block.key, block.value]));
   const stringValue = (key: string, fallback: string) => {
     const value = values.get(key);
+    if (key === "hero.title" && value === "Тренировочные шашки и видеокурсы по фланкировке") {
+      return fallback;
+    }
+    if (key === "hero.subtitle" && value === "Собственное производство. Работаем с 2015 года.") {
+      return fallback;
+    }
     return typeof value === "string" ? value : fallback;
   };
   const visible = values.get("hero.visible");
