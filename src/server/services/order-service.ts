@@ -6,6 +6,8 @@ import { revalidateDeliveryQuote } from "./delivery-service";
 import { findLengthRecommendation } from "./length-service";
 import { manualOrderState, SHASHKA_MATERIAL } from "./manual-order";
 import { createUpsellAfterPayment } from "./upsell-service";
+import { grantMasterAccessForUpsell, grantStartAccess } from "./course-access-service";
+import { requestMagicLink } from "./customer-auth-service";
 
 const MATERIAL = SHASHKA_MATERIAL;
 
@@ -230,7 +232,13 @@ export async function processRobokassaResult(input: {
   });
   if (!payment) throw new Error("Платёж не найден.");
   if (!payment.amount.equals(input.amount)) throw new Error("Сумма платежа не совпадает.");
-  if (payment.status === "SUCCEEDED") return `OK${input.invoiceId}`;
+  if (payment.status === "SUCCEEDED") {
+    try {
+      if (payment.upsellOfferId) await grantMasterAccessForUpsell(payment.upsellOfferId);
+      else if (payment.orderId) await grantStartAccess(payment.orderId);
+    } catch {}
+    return `OK${input.invoiceId}`;
+  }
 
   const processed = await db.$transaction(async (transaction) => {
     const claimed = await transaction.payment.updateMany({
@@ -259,9 +267,27 @@ export async function processRobokassaResult(input: {
     return true;
   });
   if (!processed) return `OK${input.invoiceId}`;
-  if (payment.upsellOfferId) return `OK${input.invoiceId}`;
+  if (payment.upsellOfferId) {
+    try {
+      await grantMasterAccessForUpsell(payment.upsellOfferId);
+    } catch {}
+    return `OK${input.invoiceId}`;
+  }
   if (!payment.orderId) throw new Error("Заказ платежа не найден.");
   const paidOrder = await db.order.findUniqueOrThrow({ where: { id: payment.orderId }, include: { items: true } });
+  try {
+    await grantStartAccess(paidOrder.id);
+    await requestMagicLink(paidOrder.email);
+  } catch (error) {
+    await db.auditLog.create({
+      data: {
+        action: "COURSE_ACCESS_OR_MAGIC_LINK_FAILED",
+        entity: "Order",
+        entityId: paidOrder.id,
+        after: { message: error instanceof Error ? error.message : "Unknown access error" },
+      },
+    });
+  }
   try {
     await createUpsellAfterPayment(paidOrder.id);
   } catch (error) {

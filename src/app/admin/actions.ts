@@ -299,3 +299,57 @@ export async function updateUpsellSettings(formData: FormData) {
   revalidatePath("/admin/marketing/upsell");
   revalidatePath("/thank-you");
 }
+
+export async function saveCourse(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const data = {
+    slug: String(formData.get("slug") ?? "").trim().toLowerCase(),
+    title: String(formData.get("title") ?? "").trim(),
+    description: String(formData.get("description") ?? "").trim(),
+    coverImage: String(formData.get("coverImage") ?? "").trim() || null,
+    regularPrice: Number(formData.get("regularPrice")),
+    active: formData.get("active") === "on",
+  };
+  if (!data.slug || !data.title || !data.description || data.regularPrice <= 0) throw new Error("Проверьте курс.");
+  if (id) await db.course.update({ where: { id }, data }); else await db.course.create({ data });
+  revalidatePath("/admin/learning/courses");
+}
+
+export async function saveLesson(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const data = {
+    courseId: String(formData.get("courseId")),
+    title: String(formData.get("title") ?? "").trim(),
+    description: String(formData.get("description") ?? "").trim() || null,
+    position: Number(formData.get("position")),
+    videoProvider: String(formData.get("videoProvider")) as "YANDEX_DISK" | "YOUTUBE" | "VK_VIDEO" | "RUTUBE" | "MP4",
+    videoUrl: String(formData.get("videoUrl") ?? "").trim() || null,
+    durationSeconds: String(formData.get("durationSeconds") ?? "").trim() ? Number(formData.get("durationSeconds")) : null,
+    active: formData.get("active") === "on",
+  };
+  if (!data.courseId || !data.title || !Number.isInteger(data.position)) throw new Error("Проверьте урок.");
+  if (id) await db.courseLesson.update({ where: { id }, data }); else await db.courseLesson.create({ data });
+  revalidatePath("/admin/learning/lessons");
+}
+
+export async function grantCourseAccess(formData: FormData) {
+  await requireAdmin();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const courseId = String(formData.get("courseId"));
+  const customer = await db.customer.upsert({ where: { email }, update: {}, create: { email } });
+  await db.courseAccess.upsert({
+    where: { customerId_courseId: { customerId: customer.id, courseId } },
+    update: { revokedAt: null },
+    create: { customerId: customer.id, courseId },
+  });
+  revalidatePath("/admin/learning/accesses");
+}
+
+export async function revokeCourseAccess(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id"));
+  await db.courseAccess.update({ where: { id }, data: { revokedAt: new Date() } });
+  revalidatePath("/admin/learning/accesses");
+}

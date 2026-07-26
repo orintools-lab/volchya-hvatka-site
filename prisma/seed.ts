@@ -247,6 +247,43 @@ async function main() {
     },
   });
 
+  const startCourse = await prisma.course.upsert({
+    where: { slug: "start" },
+    update: {},
+    create: {
+      slug: "start",
+      title: "Курс «Старт»",
+      description: "Базовые элементы фланкировки для последовательного начала занятий.",
+      regularPrice: 3390,
+    },
+  });
+  const masterCourse = await prisma.course.upsert({
+    where: { slug: "master" },
+    update: {},
+    create: {
+      slug: "master",
+      title: "Курс «Мастер»",
+      description: "Полная программа с базовыми и продвинутыми элементами.",
+      regularPrice: 3390,
+    },
+  });
+  for (const course of [startCourse, masterCourse]) {
+    const existingLesson = await prisma.courseLesson.findFirst({ where: { courseId: course.id, position: 1 } });
+    if (!existingLesson) {
+      await prisma.courseLesson.create({
+        data: {
+          courseId: course.id,
+          title: "Вводный урок",
+          description: "Видео будет добавлено администратором.",
+          position: 1,
+          videoProvider: "YANDEX_DISK",
+          videoUrl: null,
+          active: false,
+        },
+      });
+    }
+  }
+
   const faq = [
     ["Безопасны ли тренировочные шашки?", "Они предназначены для последовательной тренировочной практики. Соблюдайте дистанцию и рекомендации курса."],
     ["С какого возраста можно заниматься?", "Подросткам рекомендуется заниматься с учётом роста, координации и под контролем взрослого."],

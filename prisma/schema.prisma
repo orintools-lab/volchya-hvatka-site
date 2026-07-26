@@ -75,6 +75,108 @@ enum ContentKind {
   JSON
 }
 
+enum VideoProvider {
+  YANDEX_DISK
+  YOUTUBE
+  VK_VIDEO
+  RUTUBE
+  MP4
+}
+
+model Customer {
+  id             String            @id @default(cuid())
+  email          String            @unique
+  name           String?
+  phone          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  orders         Order[]
+  sessions       CustomerSession[]
+  magicLinks     MagicLinkToken[]
+  courseAccesses CourseAccess[]
+  progress       LessonProgress[]
+}
+
+model MagicLinkToken {
+  id         String    @id @default(cuid())
+  customerId String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, expiresAt])
+}
+
+model CustomerSession {
+  id         String    @id @default(cuid())
+  customerId String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, expiresAt])
+}
+
+model Course {
+  id           String         @id @default(cuid())
+  slug         String         @unique
+  title        String
+  description  String
+  coverImage   String?
+  regularPrice Decimal        @db.Decimal(12, 2)
+  active       Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  lessons      CourseLesson[]
+  accesses     CourseAccess[]
+}
+
+model CourseLesson {
+  id              String           @id @default(cuid())
+  courseId        String
+  title           String
+  description     String?
+  position        Int
+  videoProvider   VideoProvider
+  videoUrl        String?
+  durationSeconds Int?
+  active          Boolean          @default(true)
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress        LessonProgress[]
+
+  @@unique([courseId, position])
+  @@index([courseId, active, position])
+}
+
+model CourseAccess {
+  id         String    @id @default(cuid())
+  customerId String
+  courseId   String
+  orderId    String?
+  grantedAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  course     Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  order      Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([customerId, courseId])
+  @@index([orderId])
+}
+
+model LessonProgress {
+  customerId  String
+  lessonId    String
+  completedAt DateTime     @default(now())
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lesson      CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, lessonId])
+}
+
 model AdminUser {
   id           String     @id @default(cuid())
   email        String     @unique
@@ -183,6 +285,7 @@ model Media {
 model Order {
   id                      String                  @id @default(cuid())
   number                  String                  @unique
+  customerId              String?
   status                  OrderStatus             @default(NEW)
   customerName            String
   phone                   String
@@ -226,10 +329,13 @@ model Order {
   items                   OrderItem[]
   payments                Payment[]
   upsellOffer             UpsellOffer?
+  customer                Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  courseAccesses          CourseAccess[]
 
   @@index([status, createdAt])
   @@index([email])
   @@index([phone])
+  @@index([customerId])
 }
 
 model OrderItem {

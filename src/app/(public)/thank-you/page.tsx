@@ -84,6 +84,7 @@ export default async function ThankYouPage({ searchParams }: { searchParams: Pro
       </>}
     </section>}
     {accepted && <section className="admin-panel" style={{marginTop:"2rem"}}><h2>Курс «Мастер» добавлен</h2><p>Повторная покупка этого предложения невозможна.</p></section>}
+    <Link className="button" href="/my">Перейти в личный кабинет</Link>
     <Link className="button-secondary" href="/">Вернуться на главную</Link>
   </main>;
 }
