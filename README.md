@@ -65,7 +65,7 @@ PostgreSQL в `docker-compose.yml` использует только локал�
 
 Полный перечень находится в `.env.example`:
 
-- `DATABASE_URL`, `AUTH_SECRET`, `APP_URL`;
+- `DATABASE_URL`, `AUTH_SECRET`, `NEXT_PUBLIC_SITE_URL`;
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD`;
 - `PAYMENT_PROVIDER=robokassa`, логин, оба пароля, алгоритм подписи и URL
   Робокассы;
@@ -95,9 +95,13 @@ PostgreSQL в `docker-compose.yml` использует только локал�
 
 В технических настройках Робокассы укажите:
 
-- ResultURL: `https://ВАШ-ДОМЕН/api/payments/robokassa/result`;
-- SuccessURL: `https://ВАШ-ДОМЕН/payment/success`;
-- FailURL: `https://ВАШ-ДОМЕН/payment/fail`.
+- ResultURL: `${NEXT_PUBLIC_SITE_URL}/api/payments/robokassa/result`;
+- SuccessURL: `${NEXT_PUBLIC_SITE_URL}/payment/success`;
+- FailURL: `${NEXT_PUBLIC_SITE_URL}/payment/fail`.
+
+Приложение передаёт эти адреса в Робокассу как `ResultUrl2`, `SuccessUrl2` и
+`FailUrl2`, включая их в подпись платежа. При смене домена достаточно обновить
+`NEXT_PUBLIC_SITE_URL` и выполнить redeploy.
 
 ResultURL является единственным основанием для статуса `PAID`. SuccessURL только
 показывает уже подтверждённый сервером результат.

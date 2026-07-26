@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { env } from "@/lib/config/env";
+import { getAbsoluteSiteUrl } from "@/lib/config/site-url";
 
 export interface PaidOrderNotification {
   number: string;
@@ -22,18 +23,19 @@ export async function sendPaidOrderNotifications(order: PaidOrderNotification) {
     auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD },
   });
   const from = env.SMTP_USER;
+  const siteUrl = getAbsoluteSiteUrl("/");
   await transport.sendMail({
     from,
     to: order.email,
     subject: `Оплата заказа ${order.number} подтверждена`,
-    text: `Спасибо! Заказ ${order.number} оплачен.\n\nСостав: ${order.products}\nСумма: ${order.amount} ₽\nДоставка: ${order.delivery}\n\nМы сообщим об отправке отдельно.`,
+    text: `Спасибо! Заказ ${order.number} оплачен.\n\nСостав: ${order.products}\nСумма: ${order.amount} ₽\nДоставка: ${order.delivery}\n\nМы сообщим об отправке отдельно.\n\nСайт: ${siteUrl}`,
   });
   if (env.ORDER_NOTIFICATION_EMAIL) {
     await transport.sendMail({
       from,
       to: env.ORDER_NOTIFICATION_EMAIL,
       subject: `Оплачен новый заказ ${order.number}`,
-      text: `Покупатель: ${order.customerName}\nТелефон: ${order.phone}\nEmail: ${order.email}\nТовары: ${order.products}\nСумма: ${order.amount} ₽\nДоставка: ${order.delivery}`,
+      text: `Покупатель: ${order.customerName}\nТелефон: ${order.phone}\nEmail: ${order.email}\nТовары: ${order.products}\nСумма: ${order.amount} ₽\nДоставка: ${order.delivery}\nСайт: ${siteUrl}`,
     });
   }
   return { sent: true };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getRobokassaCallbackUrls } from "./site-url";
 
 const optionalString = z.string().trim().optional().default("");
 const optionalPositiveInt = z.preprocess(
@@ -9,7 +10,6 @@ const optionalPositiveInt = z.preprocess(
 const schema = z.object({
   DATABASE_URL: optionalString,
   NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
-  APP_URL: z.string().url().default("http://localhost:3000"),
   AUTH_SECRET: z.string().min(16).optional(),
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD: z.string().min(10).optional(),
@@ -21,9 +21,6 @@ const schema = z.object({
   ROBOKASSA_HASH_ALGORITHM: z
     .enum(["md5", "sha256", "sha384", "sha512"])
     .default("md5"),
-  ROBOKASSA_RESULT_URL: optionalString,
-  ROBOKASSA_SUCCESS_URL: optionalString,
-  ROBOKASSA_FAIL_URL: optionalString,
   DELIVERY_PROVIDERS: z.string().default("cdek"),
   CDEK_CLIENT_ID: optionalString,
   CDEK_CLIENT_SECRET: optionalString,
@@ -57,7 +54,6 @@ function matchesUrl(actual: string, expected: string) {
 }
 
 export function getIntegrationConfiguration() {
-  const siteUrl = env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
   const expectedCdekUrl =
     env.CDEK_ACCOUNT_MODE === "test"
       ? "https://api.edu.cdek.ru/v2"
@@ -85,18 +81,8 @@ export function getIntegrationConfiguration() {
       ),
       testMode: env.ROBOKASSA_TEST_MODE === "true",
       hashAlgorithm: env.ROBOKASSA_HASH_ALGORITHM,
-      resultUrlMatches: matchesUrl(
-        env.ROBOKASSA_RESULT_URL,
-        `${siteUrl}/api/payments/robokassa/result`,
-      ),
-      successUrlMatches: matchesUrl(
-        env.ROBOKASSA_SUCCESS_URL,
-        `${siteUrl}/payment/success`,
-      ),
-      failUrlMatches: matchesUrl(
-        env.ROBOKASSA_FAIL_URL,
-        `${siteUrl}/payment/fail`,
-      ),
+      callbackSource: "NEXT_PUBLIC_SITE_URL" as const,
+      callbackUrls: getRobokassaCallbackUrls(),
     },
   };
 }
@@ -125,12 +111,5 @@ export function assertRobokassaConfigured() {
   const configuration = getIntegrationConfiguration().robokassa;
   if (!configuration.configured) {
     throw new Error("Робокасса не настроена. Заполните логин и оба пароля.");
-  }
-  if (
-    !configuration.resultUrlMatches ||
-    !configuration.successUrlMatches ||
-    !configuration.failUrlMatches
-  ) {
-    throw new Error("Callback URL Робокассы не соответствуют адресу сайта.");
   }
 }

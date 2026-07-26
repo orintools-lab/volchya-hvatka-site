@@ -1,7 +1,14 @@
 import { db } from "@/lib/db/client";
 import Link from "next/link";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Статус оплаты",
+  alternates: { canonical: "/payment/success" },
+  robots: { index: false, follow: false },
+  openGraph: { url: "/payment/success" },
+};
 
 export default async function SuccessPage({ searchParams }: { searchParams: Promise<{ InvId?: string }> }) {
   const invoiceId = Number((await searchParams).InvId);

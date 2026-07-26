@@ -1,9 +1,30 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { db } from "@/lib/db/client";
 
 const legal = new Set(["privacy","offer","delivery","payment","returns","contacts"]);
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(
+  { params }: { params: Promise<{ legal: string }> },
+): Promise<Metadata> {
+  const { legal: key } = await params;
+  if (!legal.has(key)) return {};
+  const block = await db.contentBlock.findUnique({ where: { key: `legal.${key}` } });
+  const value = block?.value && typeof block.value === "object"
+    ? block.value as { title?: string }
+    : {};
+  const title = value.title ?? "Информация";
+  return {
+    title,
+    alternates: { canonical: `/${key}` },
+    openGraph: {
+      title,
+      url: `/${key}`,
+    },
+  };
+}
 
 export default async function LegalPage({ params }: { params: Promise<{ legal: string }> }) {
   const { legal: key } = await params;
