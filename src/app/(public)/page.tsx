@@ -106,7 +106,8 @@ export default async function HomePage() {
                 )}
                 fill
                 priority
-                sizes="(max-width: 768px) 100vw, 58vw"
+                quality={92}
+                sizes="(max-width: 900px) 100vw, 55vw"
               />
             </div>
             <div className="hero-copy">
