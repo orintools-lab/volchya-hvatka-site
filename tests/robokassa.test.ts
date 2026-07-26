@@ -23,24 +23,10 @@ describe("RobokassaPaymentProvider", () => {
     expect(url.searchParams.get("InvId")).toBe("12345");
     expect(url.searchParams.get("OutSum")).toBe("7990.00");
     expect(url.searchParams.get("IsTest")).toBe("1");
-    expect(url.searchParams.get("ResultUrl2")).toBe(
-      "https://example.test/api/payments/robokassa/result",
-    );
-    expect(url.searchParams.get("SuccessUrl2")).toBe(
-      "https://example.test/payment/success",
-    );
-    expect(url.searchParams.get("FailUrl2")).toBe(
-      "https://example.test/payment/fail",
-    );
     const expectedSignature = createHash("md5").update([
       "demo",
       "7990.00",
       "12345",
-      "https://example.test/api/payments/robokassa/result",
-      "https://example.test/payment/success",
-      "GET",
-      "https://example.test/payment/fail",
-      "GET",
       "password-one",
     ].join(":")).digest("hex");
     expect(url.searchParams.get("SignatureValue")).toBe(expectedSignature);

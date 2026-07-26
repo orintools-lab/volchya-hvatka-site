@@ -1,6 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { assertRobokassaConfigured, env } from "../config/env";
-import { getRobokassaCallbackUrls } from "../config/site-url";
 
 function digest(value: string) {
   return createHash(env.ROBOKASSA_HASH_ALGORITHM).update(value, "utf8").digest("hex");
@@ -20,21 +19,8 @@ export class RobokassaPaymentProvider {
     email: string;
   }) {
     assertRobokassaConfigured();
-    const callbackUrls = getRobokassaCallbackUrls();
-    const successMethod = "GET";
-    const failMethod = "GET";
     const signature = digest(
-      [
-        env.ROBOKASSA_MERCHANT_LOGIN,
-        input.amount,
-        input.invoiceId,
-        callbackUrls.result,
-        callbackUrls.success,
-        successMethod,
-        callbackUrls.fail,
-        failMethod,
-        env.ROBOKASSA_PASSWORD_1,
-      ].join(":"),
+      `${env.ROBOKASSA_MERCHANT_LOGIN}:${input.amount}:${input.invoiceId}:${env.ROBOKASSA_PASSWORD_1}`,
     );
     const params = new URLSearchParams({
       MerchantLogin: env.ROBOKASSA_MERCHANT_LOGIN,
@@ -46,11 +32,6 @@ export class RobokassaPaymentProvider {
       Encoding: "utf-8",
       SignatureValue: signature,
       IsTest: env.ROBOKASSA_TEST_MODE === "true" ? "1" : "0",
-      ResultUrl2: callbackUrls.result,
-      SuccessUrl2: callbackUrls.success,
-      SuccessUrl2Method: successMethod,
-      FailUrl2: callbackUrls.fail,
-      FailUrl2Method: failMethod,
     });
     return `https://auth.robokassa.ru/Merchant/Index.aspx?${params}`;
   }
