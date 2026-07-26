@@ -15,7 +15,7 @@ export async function GET() {
   const configuration = getIntegrationConfiguration();
   let cdekConnection: "ok" | "failed" | "not_configured" = "not_configured";
 
-  if (configuration.cdek.configured && configuration.cdek.apiUrlMatchesMode) {
+  if (configuration.cdek.credentialsConfigured && configuration.cdek.apiUrlMatchesMode) {
     try {
       await getDeliveryProvider().authenticate();
       cdekConnection = "ok";

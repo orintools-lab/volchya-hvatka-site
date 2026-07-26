@@ -1,4 +1,8 @@
-import { env, assertCdekConfigured } from "@/lib/config/env";
+import {
+  env,
+  assertCdekCheckoutConfigured,
+  assertCdekConfigured,
+} from "@/lib/config/env";
 import type {
   CityOption,
   DeliveryCalculation,
@@ -89,6 +93,7 @@ export class CdekDeliveryProvider implements DeliveryProvider {
   }
 
   async calculateDelivery(input: Parameters<DeliveryProvider["calculateDelivery"]>[0]) {
+    assertCdekCheckoutConfigured();
     const tariffs = await this.request<{ tariff_codes?: CdekTariff[] }>(
       "/calculator/tarifflist",
       {

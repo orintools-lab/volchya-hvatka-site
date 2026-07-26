@@ -65,11 +65,12 @@ export function getIntegrationConfiguration() {
 
   return {
     cdek: {
-      configured: Boolean(
+      credentialsConfigured: Boolean(env.CDEK_CLIENT_ID && env.CDEK_CLIENT_SECRET),
+      checkoutConfigured: Boolean(
         env.CDEK_CLIENT_ID &&
-        env.CDEK_CLIENT_SECRET &&
-        env.CDEK_SENDER_CITY_CODE &&
-        env.CDEK_DEFAULT_TARIFF_CODE
+          env.CDEK_CLIENT_SECRET &&
+          env.CDEK_SENDER_CITY_CODE &&
+          env.CDEK_DEFAULT_TARIFF_CODE
       ),
       mode: env.CDEK_ACCOUNT_MODE,
       apiUrlMatchesMode: matchesUrl(env.CDEK_API_URL, expectedCdekUrl),
@@ -102,11 +103,21 @@ export function getIntegrationConfiguration() {
 
 export function assertCdekConfigured() {
   const configuration = getIntegrationConfiguration().cdek;
-  if (!configuration.configured) {
-    throw new Error("СДЭК не настроен. Заполните credentials, город отправителя и тариф.");
+  if (!configuration.credentialsConfigured) {
+    throw new Error("СДЭК не настроен. Заполните CDEK_CLIENT_ID и CDEK_CLIENT_SECRET.");
   }
   if (!configuration.apiUrlMatchesMode) {
     throw new Error("CDEK_API_URL не соответствует выбранному CDEK_ACCOUNT_MODE.");
+  }
+}
+
+export function assertCdekCheckoutConfigured() {
+  assertCdekConfigured();
+  if (!env.CDEK_SENDER_CITY_CODE) {
+    throw new Error("Не задан CDEK_SENDER_CITY_CODE.");
+  }
+  if (!env.CDEK_DEFAULT_TARIFF_CODE) {
+    throw new Error("Не задан CDEK_DEFAULT_TARIFF_CODE.");
   }
 }
 
