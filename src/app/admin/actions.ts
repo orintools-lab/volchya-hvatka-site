@@ -81,7 +81,17 @@ export async function agreeManualDelivery(formData: FormData) {
       },
     }),
   ]);
+  revalidatePath(`/admin/orders/${id}`);
+  revalidatePath("/admin/orders");
+}
+
+export async function createManualPayment(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id"));
   await createPaymentForAgreedOrder(id);
+  await db.auditLog.create({
+    data: { adminId: admin.id, action: "MANUAL_PAYMENT_LINK_CREATED", entity: "Order", entityId: id },
+  });
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/orders");
 }
@@ -200,14 +210,14 @@ export async function updateDeliveryProviders(formData: FormData) {
   for (const provider of ["CDEK", "OZON", "MANUAL"] as const) {
     await db.deliveryProviderConfig.upsert({
       where: { provider },
-      update: { isEnabled: formData.get(provider) === "on" },
+      update: { isEnabled: provider === "MANUAL" || formData.get(provider) === "on" },
       create: {
         provider,
         label: provider === "CDEK" ? "СДЭК" : provider === "OZON" ? "Ozon" : "Доставка по согласованию",
         description: provider === "MANUAL"
           ? "Менеджер согласует способ и стоимость доставки после заявки."
           : "Автоматический расчёт доставки.",
-        isEnabled: formData.get(provider) === "on",
+        isEnabled: provider === "MANUAL" || formData.get(provider) === "on",
       },
     });
   }

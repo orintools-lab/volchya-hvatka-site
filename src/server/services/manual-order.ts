@@ -5,10 +5,7 @@ export function manualOrderState(input: {
   recommendedLengthCm?: number;
 }) {
   return {
-    status: (input.customerHeight < 100
-      ? "AWAITING_SIZE_AGREEMENT"
-      : "AWAITING_DELIVERY_AGREEMENT") as
-        "AWAITING_SIZE_AGREEMENT" | "AWAITING_DELIVERY_AGREEMENT",
+    status: "AWAITING_DELIVERY_AGREEMENT" as const,
     deliveryProvider: "MANUAL" as const,
     deliveryAgreementStatus: "PENDING" as const,
     deliveryPrice: null,

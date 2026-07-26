@@ -58,14 +58,27 @@ export async function getDeliveryOptions({ includeUnavailable = false } = {}) {
   const configured = await db.deliveryProviderConfig.findMany({
     orderBy: { provider: "asc" },
   });
+  if (!configured.some((item) => item.provider === "MANUAL")) {
+    configured.push({
+      provider: "MANUAL",
+      isEnabled: true,
+      label: "Доставка по согласованию",
+      description: "После оформления заявки мы свяжемся с вами, уточним удобный способ доставки и её стоимость.",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
   const options = await Promise.all(configured.map(async (configuration) => {
-    const availability = configuration.isEnabled
+    const enabled = configuration.provider === "MANUAL" || configuration.isEnabled;
+    const availability = enabled
       ? await services[configuration.provider].checkAvailability()
       : { available: false, reason: "Выключено администратором" };
     return {
       provider: configuration.provider,
       label: configuration.label,
-      description: configuration.description,
+      description: configuration.provider === "MANUAL"
+        ? "После оформления заявки мы свяжемся с вами, уточним удобный способ доставки и её стоимость."
+        : configuration.description,
       ...availability,
     };
   }));

@@ -90,6 +90,10 @@ export async function createOrder(input: CreateOrderInput) {
       orderNumber: order.number,
       requiresPayment: false,
       total: null,
+      productName: product.name,
+      customerHeight: input.customerHeight,
+      recommendedLengthCm: recommendation?.lengthCm ?? null,
+      material: MATERIAL,
       message: "Заявка принята. Мы свяжемся с вами, согласуем доставку и отправим ссылку на оплату.",
     };
   }

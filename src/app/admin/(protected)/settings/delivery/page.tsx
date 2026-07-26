@@ -15,13 +15,14 @@ export default async function DeliverySettingsPage() {
       {configs.map((config) => {
         const status = statuses.find((item) => item.provider === config.provider);
         return <label className="check" key={config.provider}>
-          <input type="checkbox" name={config.provider} defaultChecked={config.isEnabled} />
+          <input type="checkbox" name={config.provider} defaultChecked={config.provider === "MANUAL" || config.isEnabled} disabled={config.provider === "MANUAL"} />
           <span><strong>{config.label}</strong><br />{config.description}<br />
             Статус: {status?.available ? "доступен" : status?.reason ?? "недоступен"}
           </span>
         </label>;
       })}
       <p>Ozon подготовлен архитектурно и не показывается покупателю до подключения настоящей интеграции.</p>
+      <p>Доставка по согласованию доступна всегда и не может быть отключена.</p>
       <button className="button">Сохранить</button>
     </form>
   </>;

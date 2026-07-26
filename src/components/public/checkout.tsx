@@ -28,7 +28,14 @@ export function Checkout({ product }: { product: Product }) {
   const [pointCode, setPointCode] = useState("");
   const [address, setAddress] = useState("");
   const [quote, setQuote] = useState<{ id: string; price: string; tariffName: string }>();
-  const [success, setSuccess] = useState<{ orderNumber: string; message: string }>();
+  const [success, setSuccess] = useState<{
+    orderNumber: string;
+    productName: string;
+    customerHeight: number;
+    recommendedLengthCm: number | null;
+    material: string;
+    message: string;
+  }>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -144,7 +151,14 @@ export function Checkout({ product }: { product: Product }) {
     const data = await response.json();
     if (!response.ok) setError(data.error);
     else if (data.requiresPayment && data.paymentUrl) window.location.assign(data.paymentUrl);
-    else setSuccess({ orderNumber: data.orderNumber, message: data.message });
+    else setSuccess({
+      orderNumber: data.orderNumber,
+      productName: data.productName,
+      customerHeight: data.customerHeight,
+      recommendedLengthCm: data.recommendedLengthCm,
+      material: data.material,
+      message: data.message,
+    });
     setLoading(false);
   }
 
@@ -159,6 +173,10 @@ export function Checkout({ product }: { product: Product }) {
               <div>
                 <h2>Заявка оформлена</h2>
                 <p>Номер заявки: <strong>{success.orderNumber}</strong></p>
+                <p>Комплект: <strong>{success.productName}</strong></p>
+                <p>Рост: <strong>{success.customerHeight} см</strong></p>
+                <p>Рекомендуемая длина: <strong>{success.recommendedLengthCm ? `${success.recommendedLengthCm} см` : "требуется индивидуальный подбор"}</strong></p>
+                <p>Материал: <strong>{success.material}</strong></p>
                 <p>{success.message}</p>
                 <button className="button full" type="button" onClick={() => setOpen(false)}>Готово</button>
               </div>
@@ -178,7 +196,7 @@ export function Checkout({ product }: { product: Product }) {
                   {individualSizing ? (
                     <p>Для роста менее 100 см требуется индивидуальный подбор. Оформите заявку, и мы свяжемся с вами.</p>
                   ) : length ? (
-                    <p><strong>Рекомендуемая длина шашки: {length} см.</strong><br />Размер подобран по указанному росту. Обе шашки в комплекте будут одной длины.</p>
+                    <p><strong>Рекомендуемая длина тренировочной шашки: {length} см.</strong><br />Размер подобран по указанному росту. Обе шашки в комплекте будут одной длины.</p>
                   ) : <p>Для указанного роста рекомендация пока не настроена.</p>}
                   <fieldset>
                     <legend>Способ доставки</legend>
@@ -190,7 +208,7 @@ export function Checkout({ product }: { product: Product }) {
                     ))}
                   </fieldset>
                   {deliveryProvider === "MANUAL" ? (
-                    <p className="quote">После оформления мы свяжемся с вами, уточним удобный способ доставки и её стоимость. Оплата появится только после согласования.</p>
+                    <p className="quote">После оформления заявки мы свяжемся с вами, уточним удобный способ доставки и её стоимость. Оплата появится только после согласования.</p>
                   ) : (
                     <fieldset>
                       <legend>Доставка СДЭК</legend>
