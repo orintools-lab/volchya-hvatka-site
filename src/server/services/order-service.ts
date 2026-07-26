@@ -8,6 +8,7 @@ import { manualOrderState, SHASHKA_MATERIAL } from "./manual-order";
 import { createUpsellAfterPayment } from "./upsell-service";
 import { grantMasterAccessForUpsell, grantStartAccess } from "./course-access-service";
 import { requestMagicLink } from "./customer-auth-service";
+import { checkoutPaymentPolicy, getCheckoutPaymentMode } from "./checkout-payment-mode";
 
 const MATERIAL = SHASHKA_MATERIAL;
 
@@ -49,6 +50,11 @@ export async function createOrder(input: CreateOrderInput) {
   });
   const recommendation = findLengthRecommendation(rules, input.customerHeight);
   const subtotal = product.price;
+  const paymentMode = await getCheckoutPaymentMode();
+  const paymentPolicy = checkoutPaymentPolicy({
+    mode: paymentMode,
+    deliveryProvider: input.deliveryProvider,
+  });
   if (!recommendation && input.customerHeight >= 100) {
     throw new Error("Для указанного роста длина пока не настроена.");
   }
@@ -57,47 +63,115 @@ export async function createOrder(input: CreateOrderInput) {
   }
 
   if (input.deliveryProvider === "MANUAL") {
-    const order = await db.order.create({
-      data: {
-        number: orderNumber(),
-        ...manualOrderState({
-          customerHeight: input.customerHeight,
-          recommendedLengthCm: recommendation?.lengthCm,
-        }),
-        customerName: input.customerName,
-        phone: input.phone,
-        email: input.email,
-        postalCode: input.postalCode,
-        shashkaSize: "BY_HEIGHT",
-        customerComment: input.comment,
-        subtotal,
-        utm: input.utm,
-        items: {
-          create: {
-            productId: product.id,
-            productName: product.name,
-            productSlug: product.slug,
-            unitPrice: product.price,
-            quantity: 1,
-            total: subtotal,
+    if (!paymentPolicy.payImmediately) {
+      const order = await db.order.create({
+        data: {
+          number: orderNumber(),
+          ...manualOrderState({
+            customerHeight: input.customerHeight,
             recommendedLengthCm: recommendation?.lengthCm,
-            actualLengthCm: recommendation?.lengthCm,
-            shashkaCount: 2,
-            material: MATERIAL,
+          }),
+          customerName: input.customerName,
+          phone: input.phone,
+          email: input.email,
+          postalCode: input.postalCode,
+          shashkaSize: "BY_HEIGHT",
+          customerComment: input.comment,
+          subtotal,
+          utm: input.utm,
+          items: {
+            create: {
+              productId: product.id,
+              productName: product.name,
+              productSlug: product.slug,
+              unitPrice: product.price,
+              quantity: 1,
+              total: subtotal,
+              recommendedLengthCm: recommendation?.lengthCm,
+              actualLengthCm: recommendation?.lengthCm,
+              shashkaCount: 2,
+              material: MATERIAL,
+            },
           },
         },
-      },
+      });
+      return {
+        orderId: order.id,
+        orderNumber: order.number,
+        requiresPayment: false,
+        total: null,
+        productName: product.name,
+        customerHeight: input.customerHeight,
+        recommendedLengthCm: recommendation?.lengthCm ?? null,
+        material: MATERIAL,
+        message: "Заявка принята. Мы свяжемся с вами для согласования доставки и отправим ссылку на оплату.",
+      };
+    }
+
+    const invoiceId = await uniqueInvoiceId();
+    const immediate = await db.$transaction(async (transaction) => {
+      const order = await transaction.order.create({
+        data: {
+          number: orderNumber(),
+          status: paymentPolicy.orderStatus,
+          deliveryProvider: "MANUAL",
+          deliveryAgreementStatus: paymentPolicy.deliveryAgreementStatus,
+          deliveryPrice: 0,
+          total: subtotal,
+          customerName: input.customerName,
+          phone: input.phone,
+          email: input.email,
+          postalCode: input.postalCode,
+          shashkaSize: "BY_HEIGHT",
+          customerHeight: input.customerHeight,
+          recommendedLengthCm: recommendation?.lengthCm,
+          actualLengthCm: recommendation?.lengthCm,
+          shashkaCount: 2,
+          material: MATERIAL,
+          customerComment: input.comment,
+          subtotal,
+          utm: input.utm,
+          items: {
+            create: {
+              productId: product.id,
+              productName: product.name,
+              productSlug: product.slug,
+              unitPrice: product.price,
+              quantity: 1,
+              total: subtotal,
+              recommendedLengthCm: recommendation?.lengthCm,
+              actualLengthCm: recommendation?.lengthCm,
+              shashkaCount: 2,
+              material: MATERIAL,
+            },
+          },
+        },
+      });
+      const paymentUrl = new RobokassaPaymentProvider().createPaymentUrl({
+        invoiceId,
+        amount: subtotal.toFixed(2),
+        description: `Оплата заказа ${order.number}`,
+        email: order.email,
+      });
+      await transaction.payment.create({
+        data: {
+          orderId: order.id,
+          provider: "robokassa",
+          invoiceId,
+          idempotencyKey: `robokassa:${invoiceId}`,
+          status: "PENDING",
+          amount: subtotal,
+          providerPaymentId: paymentUrl,
+        },
+      });
+      return { order, paymentUrl };
     });
     return {
-      orderId: order.id,
-      orderNumber: order.number,
-      requiresPayment: false,
-      total: null,
-      productName: product.name,
-      customerHeight: input.customerHeight,
-      recommendedLengthCm: recommendation?.lengthCm ?? null,
-      material: MATERIAL,
-      message: "Заявка принята. Мы свяжемся с вами, согласуем доставку и отправим ссылку на оплату.",
+      orderId: immediate.order.id,
+      orderNumber: immediate.order.number,
+      requiresPayment: true,
+      paymentUrl: immediate.paymentUrl,
+      total: subtotal.toFixed(2),
     };
   }
 
@@ -217,6 +291,45 @@ export async function createPaymentForAgreedOrder(orderId: string) {
   return paymentUrl;
 }
 
+export async function createDeliveryPayment(orderId: string) {
+  const order = await db.order.findUnique({ where: { id: orderId }, include: { payments: true } });
+  if (!order || !order.deliveryPrice || order.deliveryPrice.lte(0) || order.deliveryAgreementStatus !== "AGREED") {
+    throw new Error("Сначала согласуйте ненулевую стоимость доставки.");
+  }
+  const existing = order.payments.find((payment) =>
+    payment.status === "PENDING" &&
+    typeof payment.payload === "object" &&
+    payment.payload !== null &&
+    !Array.isArray(payment.payload) &&
+    (payment.payload as { purpose?: unknown }).purpose === "DELIVERY"
+  );
+  if (existing?.providerPaymentId) return existing.providerPaymentId;
+  const invoiceId = existing?.invoiceId ?? await uniqueInvoiceId();
+  const paymentUrl = new RobokassaPaymentProvider().createPaymentUrl({
+    invoiceId,
+    amount: order.deliveryPrice.toFixed(2),
+    description: `Оплата доставки заказа ${order.number}`,
+    email: order.email,
+  });
+  if (existing) {
+    await db.payment.update({ where: { id: existing.id }, data: { providerPaymentId: paymentUrl } });
+  } else {
+    await db.payment.create({
+      data: {
+        orderId,
+        provider: "robokassa",
+        invoiceId,
+        idempotencyKey: `robokassa:delivery:${order.id}:${invoiceId}`,
+        status: "PENDING",
+        amount: order.deliveryPrice,
+        providerPaymentId: paymentUrl,
+        payload: { purpose: "DELIVERY" },
+      },
+    });
+  }
+  return paymentUrl;
+}
+
 export async function processRobokassaResult(input: {
   amount: string;
   invoiceId: number;
@@ -232,10 +345,14 @@ export async function processRobokassaResult(input: {
   });
   if (!payment) throw new Error("Платёж не найден.");
   if (!payment.amount.equals(input.amount)) throw new Error("Сумма платежа не совпадает.");
+  const isDeliveryPayment = typeof payment.payload === "object" &&
+    payment.payload !== null &&
+    !Array.isArray(payment.payload) &&
+    (payment.payload as { purpose?: unknown }).purpose === "DELIVERY";
   if (payment.status === "SUCCEEDED") {
     try {
       if (payment.upsellOfferId) await grantMasterAccessForUpsell(payment.upsellOfferId);
-      else if (payment.orderId) await grantStartAccess(payment.orderId);
+      else if (payment.orderId && !isDeliveryPayment) await grantStartAccess(payment.orderId);
     } catch {}
     return `OK${input.invoiceId}`;
   }
@@ -243,7 +360,10 @@ export async function processRobokassaResult(input: {
   const processed = await db.$transaction(async (transaction) => {
     const claimed = await transaction.payment.updateMany({
       where: { id: payment.id, status: { not: "SUCCEEDED" } },
-      data: { status: "SUCCEEDED", payload: input.payload },
+      data: {
+        status: "SUCCEEDED",
+        payload: isDeliveryPayment ? { ...input.payload, purpose: "DELIVERY" } : input.payload,
+      },
     });
     if (claimed.count === 0) return false;
     await transaction.paymentEvent.create({
@@ -257,7 +377,7 @@ export async function processRobokassaResult(input: {
       await transaction.auditLog.create({
         data: { action: "UPSELL_PAYMENT_CONFIRMED", entity: "UpsellOffer", entityId: payment.upsellOfferId, after: { invoiceId: input.invoiceId, amount: input.amount } },
       });
-    } else {
+    } else if (!isDeliveryPayment) {
       if (!payment.orderId || !payment.order) throw new Error("Заказ платежа не найден.");
       await transaction.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } });
       await transaction.auditLog.create({
@@ -267,6 +387,7 @@ export async function processRobokassaResult(input: {
     return true;
   });
   if (!processed) return `OK${input.invoiceId}`;
+  if (isDeliveryPayment) return `OK${input.invoiceId}`;
   if (payment.upsellOfferId) {
     try {
       await grantMasterAccessForUpsell(payment.upsellOfferId);
@@ -275,6 +396,24 @@ export async function processRobokassaResult(input: {
   }
   if (!payment.orderId) throw new Error("Заказ платежа не найден.");
   const paidOrder = await db.order.findUniqueOrThrow({ where: { id: payment.orderId }, include: { items: true } });
+  if (
+    paidOrder.deliveryProvider === "MANUAL" &&
+    paidOrder.deliveryAgreementStatus === "AGREED" &&
+    paidOrder.deliveryPrice?.gt(0)
+  ) {
+    try {
+      await createDeliveryPayment(paidOrder.id);
+    } catch (error) {
+      await db.auditLog.create({
+        data: {
+          action: "DELIVERY_PAYMENT_LINK_FAILED",
+          entity: "Order",
+          entityId: paidOrder.id,
+          after: { message: error instanceof Error ? error.message : "Unknown delivery payment error" },
+        },
+      });
+    }
+  }
   try {
     await grantStartAccess(paidOrder.id);
     await requestMagicLink(paidOrder.email);

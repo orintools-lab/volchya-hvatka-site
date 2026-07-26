@@ -168,6 +168,11 @@ async function main() {
   const settings = [
     { key: "brand.name", label: "Название бренда", value: "Волчья Хватка" },
     { key: "brand.tagline", label: "Подпись бренда", value: "Фланкировка с 2015 года" },
+    {
+      key: "checkoutPaymentMode",
+      label: "Порядок оплаты заказа",
+      value: "PAY_AFTER_DELIVERY_AGREEMENT",
+    },
     { key: "contacts", label: "Контакты", value: { phone: "", email: "", vk: "" } },
     {
       key: "legal.requisites",

@@ -2,11 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { db } from "@/lib/db/client";
 import { Checkout } from "@/components/public/checkout";
+import { getCheckoutPaymentMode } from "@/server/services/checkout-payment-mode";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [products, reviews, faq, content] = await Promise.all([
+  const [products, reviews, faq, content, checkoutPaymentMode] = await Promise.all([
     db.product.findMany({
       where: { isActive: true },
       orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
@@ -21,6 +22,7 @@ export default async function HomePage() {
       orderBy: { sortOrder: "asc" },
     }),
     db.contentBlock.findMany({ where: { isVisible: true } }),
+    getCheckoutPaymentMode(),
   ]);
   const contentMap = new Map(content.map((block) => [block.key, block.value]));
   const text = (key: string, fallback: string) => {
@@ -173,7 +175,7 @@ export default async function HomePage() {
                   <strong>{Number(product.price).toLocaleString("ru-RU")} ₽</strong>
                   {product.oldPrice && <s>{Number(product.oldPrice).toLocaleString("ru-RU")} ₽</s>}
                 </div>
-                <Checkout product={product} />
+                <Checkout product={product} paymentMode={checkoutPaymentMode} />
               </article>
             ))}
           </div>

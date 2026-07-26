@@ -6,7 +6,11 @@ import { db } from "@/lib/db/client";
 import { createAdminSession, destroyAdminSession, requireAdmin } from "@/lib/auth/session";
 import { verifyPassword } from "@/lib/auth/password";
 import { assertValidLengthRules } from "@/server/services/length-service";
-import { createPaymentForAgreedOrder } from "@/server/services/order-service";
+import { createDeliveryPayment, createPaymentForAgreedOrder } from "@/server/services/order-service";
+import {
+  isCheckoutPaymentMode,
+  type CheckoutPaymentMode,
+} from "@/server/services/checkout-payment-mode";
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -54,8 +58,15 @@ export async function agreeManualDelivery(formData: FormData) {
   const deliveryComment = String(formData.get("deliveryComment") ?? "").trim();
   if (!Number.isFinite(deliveryPrice) || deliveryPrice < 0) throw new Error("Укажите корректную стоимость доставки.");
   if (!Number.isInteger(actualLengthCm) || actualLengthCm <= 0) throw new Error("Укажите фактическую длину шашек.");
-  const order = await db.order.findUniqueOrThrow({ where: { id } });
-  const total = order.subtotal.add(deliveryPrice);
+  const order = await db.order.findUniqueOrThrow({ where: { id }, include: { payments: true } });
+  const alreadyPaid = order.status === "PAID";
+  const checkoutPaymentExists = order.payments.some((payment) =>
+    !(typeof payment.payload === "object" &&
+      payment.payload !== null &&
+      !Array.isArray(payment.payload) &&
+      (payment.payload as { purpose?: unknown }).purpose === "DELIVERY")
+  );
+  const total = checkoutPaymentExists ? order.total ?? order.subtotal : order.subtotal.add(deliveryPrice);
   await db.$transaction([
     db.order.update({
       where: { id },
@@ -67,7 +78,7 @@ export async function agreeManualDelivery(formData: FormData) {
         deliveryAgreementStatus: "AGREED",
         deliveryAgreedAt: new Date(),
         total,
-        status: "AWAITING_PAYMENT",
+        status: alreadyPaid ? "PAID" : "AWAITING_PAYMENT",
       },
     }),
     db.orderItem.updateMany({ where: { orderId: id }, data: { actualLengthCm } }),
@@ -81,6 +92,9 @@ export async function agreeManualDelivery(formData: FormData) {
       },
     }),
   ]);
+  if (alreadyPaid && deliveryPrice > 0) {
+    await createDeliveryPayment(id);
+  }
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/orders");
 }
@@ -225,6 +239,40 @@ export async function updateDeliveryProviders(formData: FormData) {
     data: { adminId: admin.id, action: "DELIVERY_PROVIDERS_UPDATED", entity: "DeliveryProviderConfig" },
   });
   revalidatePath("/admin/settings/delivery");
+}
+
+export async function updateCheckoutSettings(formData: FormData) {
+  const admin = await requireAdmin();
+  const value = String(formData.get("checkoutPaymentMode") ?? "");
+  if (!isCheckoutPaymentMode(value)) {
+    throw new Error("Выберите допустимый порядок оплаты заказа.");
+  }
+  const mode: CheckoutPaymentMode = value;
+  const before = await db.siteSetting.findUnique({ where: { key: "checkoutPaymentMode" } });
+  await db.$transaction([
+    db.siteSetting.upsert({
+      where: { key: "checkoutPaymentMode" },
+      update: { value: mode },
+      create: {
+        key: "checkoutPaymentMode",
+        label: "Порядок оплаты заказа",
+        value: mode,
+      },
+    }),
+    db.auditLog.create({
+      data: {
+        adminId: admin.id,
+        action: "CHECKOUT_PAYMENT_MODE_UPDATED",
+        entity: "SiteSetting",
+        entityId: "checkoutPaymentMode",
+        before: { value: before?.value ?? null },
+        after: { value: mode },
+      },
+    }),
+  ]);
+  revalidatePath("/");
+  revalidatePath("/admin/settings/checkout");
+  redirect("/admin/settings/checkout?saved=1");
 }
 
 export async function saveLengthRule(formData: FormData) {

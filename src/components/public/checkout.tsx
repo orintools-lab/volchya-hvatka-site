@@ -12,8 +12,15 @@ type DeliveryOption = {
   description: string;
   available: boolean;
 };
+type CheckoutPaymentMode = "PAY_AFTER_DELIVERY_AGREEMENT" | "PAY_IMMEDIATELY";
 
-export function Checkout({ product }: { product: Product }) {
+export function Checkout({
+  product,
+  paymentMode,
+}: {
+  product: Product;
+  paymentMode: CheckoutPaymentMode;
+}) {
   const [open, setOpen] = useState(false);
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
   const [deliveryProvider, setDeliveryProvider] = useState<"CDEK" | "MANUAL">("MANUAL");
@@ -208,7 +215,11 @@ export function Checkout({ product }: { product: Product }) {
                     ))}
                   </fieldset>
                   {deliveryProvider === "MANUAL" ? (
-                    <p className="quote">После оформления заявки мы свяжемся с вами, уточним удобный способ доставки и её стоимость. Оплата появится только после согласования.</p>
+                    paymentMode === "PAY_IMMEDIATELY" ? (
+                      <p className="quote">Стоимость доставки не включена в оплату. Мы свяжемся с вами после оформления заказа для её согласования.</p>
+                    ) : (
+                      <p className="quote">После оформления заявки мы свяжемся с вами, уточним удобный способ доставки и её стоимость. Оплата появится только после согласования.</p>
+                    )
                   ) : (
                     <fieldset>
                       <legend>Доставка СДЭК</legend>
@@ -238,7 +249,11 @@ export function Checkout({ product }: { product: Product }) {
                   <label className="check"><input name="offerAccepted" type="checkbox" required /> Принимаю <Link href="/offer">публичную оферту</Link></label>
                   {error && <p className="form-error" role="alert">{error}</p>}
                   <button className="button full" disabled={loading || !height || (!length && !individualSizing) || (deliveryProvider === "CDEK" && !quote)}>
-                    {loading ? "Проверяем…" : deliveryProvider === "MANUAL" ? "Оформить заявку" : "Перейти к оплате"}
+                    {loading
+                      ? "Проверяем…"
+                      : deliveryProvider === "MANUAL" && paymentMode === "PAY_AFTER_DELIVERY_AGREEMENT"
+                        ? "Оформить заявку"
+                        : "Перейти к оплате"}
                   </button>
                 </form>
               </>
