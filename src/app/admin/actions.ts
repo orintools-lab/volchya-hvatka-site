@@ -254,3 +254,48 @@ export async function saveLengthRule(formData: FormData) {
   });
   revalidatePath("/admin/products/length-rules");
 }
+
+export async function updateUpsellSettings(formData: FormData) {
+  const admin = await requireAdmin();
+  const regularPrice = Number(formData.get("regularPrice"));
+  const specialPrice = Number(formData.get("specialPrice"));
+  const durationMinutes = Number(formData.get("durationMinutes"));
+  const title = String(formData.get("title") ?? "").trim();
+  const text = String(formData.get("text") ?? "").trim();
+  const videoUrl = String(formData.get("videoUrl") ?? "").trim() || null;
+  if (
+    !Number.isFinite(regularPrice) || regularPrice <= 0 ||
+    !Number.isFinite(specialPrice) || specialPrice <= 0 ||
+    !Number.isInteger(durationMinutes) || durationMinutes <= 0 ||
+    !title || !text
+  ) throw new Error("Проверьте настройки upsell.");
+  await db.$transaction([
+    db.upsellSettings.upsert({
+      where: { id: "default" },
+      update: {
+        enabled: formData.get("enabled") === "on",
+        regularPrice,
+        specialPrice,
+        durationMinutes,
+        videoUrl,
+        title,
+        text,
+      },
+      create: {
+        id: "default",
+        enabled: formData.get("enabled") === "on",
+        regularPrice,
+        specialPrice,
+        durationMinutes,
+        videoUrl,
+        title,
+        text,
+      },
+    }),
+    db.auditLog.create({
+      data: { adminId: admin.id, action: "UPSELL_SETTINGS_UPDATED", entity: "UpsellSettings", entityId: "default" },
+    }),
+  ]);
+  revalidatePath("/admin/marketing/upsell");
+  revalidatePath("/thank-you");
+}

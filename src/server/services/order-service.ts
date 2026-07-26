@@ -5,6 +5,7 @@ import { sendPaidOrderNotifications } from "@/lib/notifications/email";
 import { revalidateDeliveryQuote } from "./delivery-service";
 import { findLengthRecommendation } from "./length-service";
 import { manualOrderState, SHASHKA_MATERIAL } from "./manual-order";
+import { createUpsellAfterPayment } from "./upsell-service";
 
 const MATERIAL = SHASHKA_MATERIAL;
 
@@ -223,7 +224,10 @@ export async function processRobokassaResult(input: {
   const provider = new RobokassaPaymentProvider();
   if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(input.amount)) throw new Error("Некорректная сумма платежа.");
   if (!provider.verifyResult(input)) throw new Error("Некорректная подпись.");
-  const payment = await db.payment.findUnique({ where: { invoiceId: input.invoiceId }, include: { order: true } });
+  const payment = await db.payment.findUnique({
+    where: { invoiceId: input.invoiceId },
+    include: { order: true, upsellOffer: true },
+  });
   if (!payment) throw new Error("Платёж не найден.");
   if (!payment.amount.equals(input.amount)) throw new Error("Сумма платежа не совпадает.");
   if (payment.status === "SUCCEEDED") return `OK${input.invoiceId}`;
@@ -237,14 +241,39 @@ export async function processRobokassaResult(input: {
     await transaction.paymentEvent.create({
       data: { paymentId: payment.id, externalEventId: `result:${input.invoiceId}`, eventType: "ROBOKASSA_RESULT", payload: input.payload },
     });
-    await transaction.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } });
-    await transaction.auditLog.create({
-      data: { action: "PAYMENT_CONFIRMED", entity: "Order", entityId: payment.orderId, after: { invoiceId: input.invoiceId, amount: input.amount } },
-    });
+    if (payment.upsellOfferId) {
+      await transaction.upsellOffer.update({
+        where: { id: payment.upsellOfferId },
+        data: { status: "ACCEPTED", usedAt: new Date() },
+      });
+      await transaction.auditLog.create({
+        data: { action: "UPSELL_PAYMENT_CONFIRMED", entity: "UpsellOffer", entityId: payment.upsellOfferId, after: { invoiceId: input.invoiceId, amount: input.amount } },
+      });
+    } else {
+      if (!payment.orderId || !payment.order) throw new Error("Заказ платежа не найден.");
+      await transaction.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } });
+      await transaction.auditLog.create({
+        data: { action: "PAYMENT_CONFIRMED", entity: "Order", entityId: payment.orderId, after: { invoiceId: input.invoiceId, amount: input.amount } },
+      });
+    }
     return true;
   });
   if (!processed) return `OK${input.invoiceId}`;
+  if (payment.upsellOfferId) return `OK${input.invoiceId}`;
+  if (!payment.orderId) throw new Error("Заказ платежа не найден.");
   const paidOrder = await db.order.findUniqueOrThrow({ where: { id: payment.orderId }, include: { items: true } });
+  try {
+    await createUpsellAfterPayment(paidOrder.id);
+  } catch (error) {
+    await db.auditLog.create({
+      data: {
+        action: "UPSELL_CREATION_FAILED",
+        entity: "Order",
+        entityId: paidOrder.id,
+        after: { message: error instanceof Error ? error.message : "Unknown upsell error" },
+      },
+    });
+  }
   try {
     const notification = await sendPaidOrderNotifications({
       number: paidOrder.number,

@@ -16,6 +16,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         <Link href="/admin/products">Товары</Link>
         <Link href="/admin/products/length-rules">Подбор длины</Link>
         <Link href="/admin/settings/delivery">Доставка</Link>
+        <Link href="/admin/marketing/upsell">Маркетинг → Upsell</Link>
         <Link href="/admin/content">Контент</Link>
         <Link href="/admin/reviews">Отзывы</Link>
         <Link href="/admin/faq">FAQ</Link>
