@@ -46,8 +46,11 @@ export async function createOrder(input: CreateOrderInput) {
   });
   const recommendation = findLengthRecommendation(rules, input.customerHeight);
   const subtotal = product.price;
-  if (!recommendation) {
+  if (!recommendation && input.customerHeight >= 100) {
     throw new Error("Для указанного роста длина пока не настроена.");
+  }
+  if (input.customerHeight < 100 && input.deliveryProvider !== "MANUAL") {
+    throw new Error("Для роста менее 100 см доступно только индивидуальное согласование.");
   }
 
   if (input.deliveryProvider === "MANUAL") {
@@ -56,7 +59,7 @@ export async function createOrder(input: CreateOrderInput) {
         number: orderNumber(),
         ...manualOrderState({
           customerHeight: input.customerHeight,
-          recommendedLengthCm: recommendation.lengthCm,
+          recommendedLengthCm: recommendation?.lengthCm,
         }),
         customerName: input.customerName,
         phone: input.phone,
@@ -74,8 +77,8 @@ export async function createOrder(input: CreateOrderInput) {
             unitPrice: product.price,
             quantity: 1,
             total: subtotal,
-            recommendedLengthCm: recommendation.lengthCm,
-            actualLengthCm: recommendation.lengthCm,
+            recommendedLengthCm: recommendation?.lengthCm,
+            actualLengthCm: recommendation?.lengthCm,
             shashkaCount: 2,
             material: MATERIAL,
           },
@@ -92,6 +95,7 @@ export async function createOrder(input: CreateOrderInput) {
   }
 
   if (!input.quoteId) throw new Error("Подтвердите способ доставки.");
+  if (!recommendation) throw new Error("Для указанного роста длина пока не настроена.");
   const quote = await revalidateDeliveryQuote(input.quoteId);
   if (quote.productId !== product.id) throw new Error("Состав заказа изменился. Повторите расчёт.");
   const cdekSubtotal = product.price.mul(quote.quantity);

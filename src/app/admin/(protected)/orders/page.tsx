@@ -24,7 +24,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     <form className="admin-filters">
       <input name="q" defaultValue={q} placeholder="Номер, имя, телефон или email" />
       <select name="status" defaultValue={status}><option value="">Все статусы</option>
-        {["NEW","AWAITING_DELIVERY_AGREEMENT","AWAITING_PAYMENT","PAID","PROCESSING","READY_TO_SHIP","SHIPPED","COMPLETED","CANCELLED","REFUNDED"].map((item)=><option key={item}>{item}</option>)}
+        {["NEW","AWAITING_DELIVERY_AGREEMENT","AWAITING_SIZE_AGREEMENT","AWAITING_PAYMENT","PAID","PROCESSING","READY_TO_SHIP","SHIPPED","COMPLETED","CANCELLED","REFUNDED"].map((item)=><option key={item}>{item}</option>)}
       </select><button className="button">Найти</button>
     </form>
     <div className="admin-table">

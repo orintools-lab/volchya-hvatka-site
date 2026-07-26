@@ -28,7 +28,7 @@ export async function updateOrder(formData: FormData) {
   const admin = await requireAdmin();
   const id = String(formData.get("id"));
   const status = String(formData.get("status")) as
-    | "AWAITING_DELIVERY_AGREEMENT" | "AWAITING_PAYMENT" | "PAID" | "PROCESSING" | "READY_TO_SHIP"
+    | "AWAITING_DELIVERY_AGREEMENT" | "AWAITING_SIZE_AGREEMENT" | "AWAITING_PAYMENT" | "PAID" | "PROCESSING" | "READY_TO_SHIP"
     | "SHIPPED" | "COMPLETED" | "CANCELLED" | "REFUNDED";
   const adminNote = String(formData.get("adminNote") ?? "").trim();
   const before = await db.order.findUniqueOrThrow({ where: { id } });
@@ -223,7 +223,9 @@ export async function saveLengthRule(formData: FormData) {
   const candidate = {
     id: id || undefined,
     minHeightCm: Number(formData.get("minHeightCm")),
-    maxHeightCm: Number(formData.get("maxHeightCm")),
+    maxHeightCm: String(formData.get("maxHeightCm") ?? "").trim()
+      ? Number(formData.get("maxHeightCm"))
+      : null,
     lengthCm: Number(formData.get("lengthCm")),
     label: String(formData.get("label") ?? "").trim(),
     isActive: formData.get("isActive") === "on",

@@ -215,6 +215,24 @@ async function main() {
     });
   }
 
+  const lengthRules = [
+    { minHeightCm: 100, maxHeightCm: 109, lengthCm: 55, label: "Рост 100–109 см", sortOrder: 10 },
+    { minHeightCm: 110, maxHeightCm: 119, lengthCm: 65, label: "Рост 110–119 см", sortOrder: 20 },
+    { minHeightCm: 120, maxHeightCm: 139, lengthCm: 76, label: "Рост 120–139 см", sortOrder: 30 },
+    { minHeightCm: 140, maxHeightCm: 154, lengthCm: 82, label: "Рост 140–154 см", sortOrder: 40 },
+    { minHeightCm: 155, maxHeightCm: 169, lengthCm: 86, label: "Рост 155–169 см", sortOrder: 50 },
+    { minHeightCm: 170, maxHeightCm: null, lengthCm: 90, label: "Рост от 170 см", sortOrder: 60 },
+  ];
+  await prisma.lengthRule.updateMany({ data: { isActive: false } });
+  for (const rule of lengthRules) {
+    const existing = await prisma.lengthRule.findFirst({ where: { label: rule.label } });
+    if (existing) {
+      await prisma.lengthRule.update({ where: { id: existing.id }, data: { ...rule, isActive: true } });
+    } else {
+      await prisma.lengthRule.create({ data: rule });
+    }
+  }
+
   const faq = [
     ["Безопасны ли тренировочные шашки?", "Они предназначены для последовательной тренировочной практики. Соблюдайте дистанцию и рекомендации курса."],
     ["С какого возраста можно заниматься?", "Подросткам рекомендуется заниматься с учётом роста, координации и под контролем взрослого."],

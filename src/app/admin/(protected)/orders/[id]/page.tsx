@@ -32,7 +32,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       <a className="button-secondary" href={order.payments.find((payment) => payment.status === "PENDING")?.providerPaymentId ?? "#"} target="_blank">Открыть ссылку</a>
     </section>}
     <form action={updateOrder} className="admin-panel admin-form"><h2>Обработка</h2><input type="hidden" name="id" value={order.id} />
-      <label>Статус<select name="status" defaultValue={order.status}>{["AWAITING_DELIVERY_AGREEMENT","AWAITING_PAYMENT","PAID","PROCESSING","READY_TO_SHIP","SHIPPED","COMPLETED","CANCELLED","REFUNDED"].map((item)=><option key={item}>{item}</option>)}</select></label>
+      <label>Статус<select name="status" defaultValue={order.status}>{["AWAITING_DELIVERY_AGREEMENT","AWAITING_SIZE_AGREEMENT","AWAITING_PAYMENT","PAID","PROCESSING","READY_TO_SHIP","SHIPPED","COMPLETED","CANCELLED","REFUNDED"].map((item)=><option key={item}>{item}</option>)}</select></label>
       <label>Внутренняя заметка<textarea name="adminNote" defaultValue={order.adminNote ?? ""} rows={5} /></label>
       <button className="button">Сохранить</button></form>
   </>;

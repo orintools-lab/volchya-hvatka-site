@@ -21,4 +21,13 @@ describe("manual order", () => {
     expect(manualOrderState({ customerHeight: 175, recommendedLengthCm: 85 }))
       .toMatchObject({ recommendedLengthCm: 85, actualLengthCm: 85, shashkaCount: 2 });
   });
+
+  it("для роста ниже 100 см ожидает индивидуального согласования размера", () => {
+    expect(manualOrderState({ customerHeight: 99 })).toMatchObject({
+      status: "AWAITING_SIZE_AGREEMENT",
+      recommendedLengthCm: undefined,
+      actualLengthCm: undefined,
+      deliveryProvider: "MANUAL",
+    });
+  });
 });

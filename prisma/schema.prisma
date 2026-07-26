@@ -15,6 +15,7 @@ enum ProductCategory {
 enum OrderStatus {
   NEW
   AWAITING_DELIVERY_AGREEMENT
+  AWAITING_SIZE_AGREEMENT
   AWAITING_PAYMENT
   PAID
   PROCESSING
@@ -325,7 +326,7 @@ model DeliveryProviderConfig {
 model LengthRule {
   id          String   @id @default(cuid())
   minHeightCm Int
-  maxHeightCm Int
+  maxHeightCm Int?
   lengthCm    Int
   label       String
   isActive    Boolean  @default(true)

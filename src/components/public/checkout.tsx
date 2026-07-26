@@ -19,6 +19,7 @@ export function Checkout({ product }: { product: Product }) {
   const [deliveryProvider, setDeliveryProvider] = useState<"CDEK" | "MANUAL">("MANUAL");
   const [height, setHeight] = useState("");
   const [length, setLength] = useState<number>();
+  const individualSizing = Number(height) > 0 && Number(height) < 100;
   const [cityQuery, setCityQuery] = useState("");
   const [cities, setCities] = useState<City[]>([]);
   const [city, setCity] = useState<City>();
@@ -49,18 +50,28 @@ export function Checkout({ product }: { product: Product }) {
 
   useEffect(() => {
     const numericHeight = Number(height);
-    if (!Number.isInteger(numericHeight) || numericHeight < 80 || numericHeight > 230) {
+    if (!Number.isInteger(numericHeight) || numericHeight < 1 || numericHeight > 250) {
       setLength(undefined);
       return;
     }
     const timeout = window.setTimeout(() => {
       fetch(`/api/length-recommendation?height=${numericHeight}`)
         .then((response) => response.json())
-        .then((result) => setLength(result.configured ? result.lengthCm : undefined))
+        .then((result) => {
+          setLength(result.configured ? result.lengthCm : undefined);
+          if (result.individual) setDeliveryProvider("MANUAL");
+        })
         .catch(() => setLength(undefined));
     }, 250);
     return () => window.clearTimeout(timeout);
   }, [height]);
+
+  useEffect(() => {
+    if (individualSizing) {
+      setDeliveryProvider("MANUAL");
+      setQuote(undefined);
+    }
+  }, [individualSizing]);
 
   function fallbackToManual() {
     setDeliveryProvider("MANUAL");
@@ -109,7 +120,7 @@ export function Checkout({ product }: { product: Product }) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!length) return setError("Для указанного роста длина пока не настроена.");
+    if (!length && !individualSizing) return setError("Для указанного роста длина пока не настроена.");
     if (deliveryProvider === "CDEK" && !quote) return setError("Рассчитайте и подтвердите доставку.");
     setLoading(true); setError("");
     const form = new FormData(event.currentTarget);
@@ -160,14 +171,18 @@ export function Checkout({ product }: { product: Product }) {
                     <label>ФИО<input name="customerName" required minLength={3} /></label>
                     <label>Телефон<input name="phone" type="tel" required /></label>
                     <label>Email<input name="email" type="email" required /></label>
-                    <label>Рост, см<input name="customerHeight" type="number" min="80" max="230" required value={height} onChange={(event) => setHeight(event.target.value)} /></label>
+                    <label>Ваш рост, см<input name="customerHeight" type="number" min="1" max="250" required value={height} onChange={(event) => setHeight(event.target.value)} /></label>
                     <label>Материал<input value="Берёзовая фанера" readOnly /></label>
                     <label>Почтовый индекс<input name="postalCode" /></label>
                   </div>
-                  <p>{length ? `Для вашего роста рекомендуется шашка длиной ${length} см.` : "Для указанного роста рекомендация пока не настроена."}</p>
+                  {individualSizing ? (
+                    <p>Для роста менее 100 см требуется индивидуальный подбор. Оформите заявку, и мы свяжемся с вами.</p>
+                  ) : length ? (
+                    <p><strong>Рекомендуемая длина шашки: {length} см.</strong><br />Размер подобран по указанному росту. Обе шашки в комплекте будут одной длины.</p>
+                  ) : <p>Для указанного роста рекомендация пока не настроена.</p>}
                   <fieldset>
                     <legend>Способ доставки</legend>
-                    {deliveryOptions.map((option) => (
+                    {deliveryOptions.filter((option) => !individualSizing || option.provider === "MANUAL").map((option) => (
                       <label className="check" key={option.provider}>
                         <input type="radio" name="deliveryProvider" checked={deliveryProvider === option.provider} onChange={() => { setDeliveryProvider(option.provider); setQuote(undefined); }} />
                         <span><strong>{option.label}</strong><br />{option.description}</span>
@@ -204,7 +219,7 @@ export function Checkout({ product }: { product: Product }) {
                   <label className="check"><input name="privacyAccepted" type="checkbox" required /> Согласен с <Link href="/privacy">политикой конфиденциальности</Link></label>
                   <label className="check"><input name="offerAccepted" type="checkbox" required /> Принимаю <Link href="/offer">публичную оферту</Link></label>
                   {error && <p className="form-error" role="alert">{error}</p>}
-                  <button className="button full" disabled={loading || !height || !length || (deliveryProvider === "CDEK" && !quote)}>
+                  <button className="button full" disabled={loading || !height || (!length && !individualSizing) || (deliveryProvider === "CDEK" && !quote)}>
                     {loading ? "Проверяем…" : deliveryProvider === "MANUAL" ? "Оформить заявку" : "Перейти к оплате"}
                   </button>
                 </form>

@@ -18,7 +18,7 @@ export const orderSchema = z.object({
   phone: z.string().trim().min(7).max(32),
   email: z.string().email(),
   postalCode: z.string().trim().max(20).optional(),
-  customerHeight: z.number().int().min(80).max(230),
+  customerHeight: z.number().int().min(1).max(250),
   comment: z.string().trim().max(1000).optional(),
   privacyAccepted: z.literal(true),
   offerAccepted: z.literal(true),

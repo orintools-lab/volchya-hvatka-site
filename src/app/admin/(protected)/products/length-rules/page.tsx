@@ -17,7 +17,7 @@ export default async function LengthRulesPage() {
         <input type="hidden" name="id" value={rule.id} />
         <label>Название<input name="label" defaultValue={rule.label} required /></label>
         <label>Рост от<input name="minHeightCm" type="number" defaultValue={rule.minHeightCm} required /></label>
-        <label>Рост до<input name="maxHeightCm" type="number" defaultValue={rule.maxHeightCm} required /></label>
+        <label>Рост до (пусто = без верхней границы)<input name="maxHeightCm" type="number" defaultValue={rule.maxHeightCm ?? ""} /></label>
         <label>Длина шашки<input name="lengthCm" type="number" defaultValue={rule.lengthCm} required /></label>
         <label className="check"><input name="isActive" type="checkbox" defaultChecked={rule.isActive} /> Активно</label>
         <button className="button-secondary">Сохранить правило</button>
@@ -27,7 +27,7 @@ export default async function LengthRulesPage() {
       <h2>Добавить правило</h2>
       <label>Название<input name="label" required /></label>
       <label>Рост от<input name="minHeightCm" type="number" required /></label>
-      <label>Рост до<input name="maxHeightCm" type="number" required /></label>
+      <label>Рост до (пусто = без верхней границы)<input name="maxHeightCm" type="number" /></label>
       <label>Длина шашки<input name="lengthCm" type="number" required /></label>
       <label className="check"><input name="isActive" type="checkbox" defaultChecked /> Активно</label>
       <button className="button">Добавить</button>
