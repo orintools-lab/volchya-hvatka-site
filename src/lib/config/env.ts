@@ -21,6 +21,9 @@ const schema = z.object({
   ROBOKASSA_HASH_ALGORITHM: z
     .enum(["md5", "sha256", "sha384", "sha512"])
     .default("md5"),
+  ROBOKASSA_RESULT_URL: optionalString,
+  ROBOKASSA_SUCCESS_URL: optionalString,
+  ROBOKASSA_FAIL_URL: optionalString,
   DELIVERY_PROVIDERS: z.string().default("cdek"),
   CDEK_CLIENT_ID: optionalString,
   CDEK_CLIENT_SECRET: optionalString,
@@ -83,6 +86,18 @@ export function getIntegrationConfiguration() {
       hashAlgorithm: env.ROBOKASSA_HASH_ALGORITHM,
       callbackSource: "NEXT_PUBLIC_SITE_URL" as const,
       callbackUrls: getRobokassaCallbackUrls(),
+      resultUrlMatches: matchesUrl(
+        env.ROBOKASSA_RESULT_URL,
+        getRobokassaCallbackUrls().result,
+      ),
+      successUrlMatches: matchesUrl(
+        env.ROBOKASSA_SUCCESS_URL,
+        getRobokassaCallbackUrls().success,
+      ),
+      failUrlMatches: matchesUrl(
+        env.ROBOKASSA_FAIL_URL,
+        getRobokassaCallbackUrls().fail,
+      ),
     },
   };
 }
@@ -111,5 +126,12 @@ export function assertRobokassaConfigured() {
   const configuration = getIntegrationConfiguration().robokassa;
   if (!configuration.configured) {
     throw new Error("Робокасса не настроена. Заполните логин и оба пароля.");
+  }
+  if (
+    !configuration.resultUrlMatches ||
+    !configuration.successUrlMatches ||
+    !configuration.failUrlMatches
+  ) {
+    throw new Error("Callback URL Робокассы не соответствуют NEXT_PUBLIC_SITE_URL.");
   }
 }

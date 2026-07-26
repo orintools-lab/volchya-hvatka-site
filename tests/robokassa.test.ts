@@ -8,6 +8,12 @@ beforeAll(() => {
   process.env.ROBOKASSA_HASH_ALGORITHM = "md5";
   process.env.ROBOKASSA_TEST_MODE = "true";
   process.env.NEXT_PUBLIC_SITE_URL = "https://example.test";
+  process.env.ROBOKASSA_RESULT_URL =
+    "https://example.test/api/payments/robokassa/result";
+  process.env.ROBOKASSA_SUCCESS_URL =
+    "https://example.test/payment/success";
+  process.env.ROBOKASSA_FAIL_URL =
+    "https://example.test/payment/fail";
 });
 
 describe("RobokassaPaymentProvider", () => {
@@ -52,6 +58,9 @@ describe("RobokassaPaymentProvider", () => {
         success: "https://example.test/payment/success",
         fail: "https://example.test/payment/fail",
       },
+      resultUrlMatches: true,
+      successUrlMatches: true,
+      failUrlMatches: true,
     });
   });
 });

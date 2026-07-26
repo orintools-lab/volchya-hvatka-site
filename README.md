@@ -103,6 +103,15 @@ PostgreSQL в `docker-compose.yml` использует только локал�
 диагностике интеграций. До подключения Робокассы их нужно указать в технических
 настройках магазина. Внутренние маршруты приложения остаются относительными.
 
+Для основного production-домена:
+
+```env
+NEXT_PUBLIC_SITE_URL=https://flankirovka1.ru
+ROBOKASSA_RESULT_URL=https://flankirovka1.ru/api/payments/robokassa/result
+ROBOKASSA_SUCCESS_URL=https://flankirovka1.ru/payment/success
+ROBOKASSA_FAIL_URL=https://flankirovka1.ru/payment/fail
+```
+
 ResultURL является единственным основанием для статуса `PAID`. SuccessURL только
 показывает уже подтверждённый сервером результат.
 
