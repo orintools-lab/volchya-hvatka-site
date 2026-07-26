@@ -1,7 +1,7 @@
-const LOCAL_SITE_URL = "http://localhost:3000";
+const DEFAULT_SITE_URL = "https://flankirovka1.ru";
 
 export function getSiteUrl() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || LOCAL_SITE_URL).replace(/\/+$/, "");
+  return (process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL).replace(/\/+$/, "");
 }
 
 export function getAbsoluteSiteUrl(path = "/") {

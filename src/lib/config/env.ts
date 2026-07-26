@@ -9,7 +9,7 @@ const optionalPositiveInt = z.preprocess(
 
 const schema = z.object({
   DATABASE_URL: optionalString,
-  NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
+  NEXT_PUBLIC_SITE_URL: z.string().url().default("https://flankirovka1.ru"),
   AUTH_SECRET: z.string().min(16).optional(),
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD: z.string().min(10).optional(),
@@ -18,9 +18,10 @@ const schema = z.object({
   ROBOKASSA_PASSWORD_1: optionalString,
   ROBOKASSA_PASSWORD_2: optionalString,
   ROBOKASSA_TEST_MODE: z.enum(["true", "false"]).default("true"),
-  ROBOKASSA_HASH_ALGORITHM: z
-    .enum(["md5", "sha256", "sha384", "sha512"])
-    .default("md5"),
+  ROBOKASSA_HASH_ALGORITHM: z.preprocess(
+    (value) => typeof value === "string" ? value.trim().toLowerCase() : value,
+    z.enum(["md5", "sha256", "sha384", "sha512"]).default("md5"),
+  ),
   ROBOKASSA_RESULT_URL: optionalString,
   ROBOKASSA_SUCCESS_URL: optionalString,
   ROBOKASSA_FAIL_URL: optionalString,
