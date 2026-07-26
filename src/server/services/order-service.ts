@@ -116,6 +116,9 @@ export async function processRobokassaResult(input: {
   payload: Record<string, string>;
 }) {
   const provider = new RobokassaPaymentProvider();
+  if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(input.amount)) {
+    throw new Error("Некорректная сумма платежа.");
+  }
   if (!provider.verifyResult(input)) throw new Error("Некорректная подпись.");
 
   const payment = await db.payment.findUnique({
@@ -123,20 +126,17 @@ export async function processRobokassaResult(input: {
     include: { order: true },
   });
   if (!payment) throw new Error("Платёж не найден.");
-  if (payment.amount.toFixed(2) !== Number(input.amount).toFixed(2)) {
+  if (!payment.amount.equals(input.amount)) {
     throw new Error("Сумма платежа не совпадает.");
   }
   if (payment.status === "SUCCEEDED") return `OK${input.invoiceId}`;
 
-  await db.$transaction(async (transaction) => {
-    const current = await transaction.payment.findUniqueOrThrow({
-      where: { id: payment.id },
-    });
-    if (current.status === "SUCCEEDED") return;
-    await transaction.payment.update({
-      where: { id: payment.id },
+  const processed = await db.$transaction(async (transaction) => {
+    const claimed = await transaction.payment.updateMany({
+      where: { id: payment.id, status: { not: "SUCCEEDED" } },
       data: { status: "SUCCEEDED", payload: input.payload },
     });
+    if (claimed.count === 0) return false;
     await transaction.paymentEvent.create({
       data: {
         paymentId: payment.id,
@@ -157,7 +157,9 @@ export async function processRobokassaResult(input: {
         after: { invoiceId: input.invoiceId, amount: input.amount },
       },
     });
+    return true;
   });
+  if (!processed) return `OK${input.invoiceId}`;
   const paidOrder = await db.order.findUniqueOrThrow({
     where: { id: payment.orderId },
     include: { items: true },

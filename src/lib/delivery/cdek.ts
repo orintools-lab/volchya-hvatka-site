@@ -49,7 +49,7 @@ export class CdekDeliveryProvider implements DeliveryProvider {
     return data.access_token;
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+  private async request<T>(path: string, init?: RequestInit, canRetry = true): Promise<T> {
     const token = await this.authenticate();
     const response = await fetch(`${env.CDEK_API_URL}${path}`, {
       ...init,
@@ -60,9 +60,9 @@ export class CdekDeliveryProvider implements DeliveryProvider {
       },
       cache: "no-store",
     });
-    if (response.status === 401) {
+    if (response.status === 401 && canRetry) {
       tokenCache = undefined;
-      return this.request<T>(path, init);
+      return this.request<T>(path, init, false);
     }
     if (!response.ok) throw new Error(`СДЭК временно недоступен (${response.status}).`);
     return (await response.json()) as T;

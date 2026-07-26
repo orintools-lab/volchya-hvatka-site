@@ -6,6 +6,13 @@ beforeAll(() => {
   process.env.ROBOKASSA_PASSWORD_2 = "password-two";
   process.env.ROBOKASSA_HASH_ALGORITHM = "md5";
   process.env.ROBOKASSA_TEST_MODE = "true";
+  process.env.NEXT_PUBLIC_SITE_URL = "https://volchya-hvatka-site.vercel.app";
+  process.env.ROBOKASSA_RESULT_URL =
+    "https://volchya-hvatka-site.vercel.app/api/payments/robokassa/result";
+  process.env.ROBOKASSA_SUCCESS_URL =
+    "https://volchya-hvatka-site.vercel.app/payment/success";
+  process.env.ROBOKASSA_FAIL_URL =
+    "https://volchya-hvatka-site.vercel.app/payment/fail";
 });
 
 describe("RobokassaPaymentProvider", () => {
@@ -31,5 +38,16 @@ describe("RobokassaPaymentProvider", () => {
       invoiceId: 12345,
       signature: "00000000000000000000000000000000",
     })).toBe(false);
+  });
+
+  it("подтверждает безопасную test-конфигурацию callback URL", async () => {
+    const { getIntegrationConfiguration } = await import("../src/lib/config/env");
+    expect(getIntegrationConfiguration().robokassa).toMatchObject({
+      configured: true,
+      testMode: true,
+      resultUrlMatches: true,
+      successUrlMatches: true,
+      failUrlMatches: true,
+    });
   });
 });

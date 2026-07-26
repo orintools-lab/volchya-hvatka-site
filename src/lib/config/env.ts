@@ -44,22 +44,82 @@ const schema = z.object({
 
 export const env = schema.parse(process.env);
 
+function matchesUrl(actual: string, expected: string) {
+  if (!actual) return false;
+  try {
+    const normalized = new URL(actual);
+    const target = new URL(expected);
+    return normalized.origin === target.origin &&
+      normalized.pathname.replace(/\/$/, "") === target.pathname;
+  } catch {
+    return false;
+  }
+}
+
+export function getIntegrationConfiguration() {
+  const siteUrl = env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
+  const expectedCdekUrl =
+    env.CDEK_ACCOUNT_MODE === "test"
+      ? "https://api.edu.cdek.ru/v2"
+      : "https://api.cdek.ru/v2";
+
+  return {
+    cdek: {
+      configured: Boolean(
+        env.CDEK_CLIENT_ID &&
+        env.CDEK_CLIENT_SECRET &&
+        env.CDEK_SENDER_CITY_CODE &&
+        env.CDEK_DEFAULT_TARIFF_CODE
+      ),
+      mode: env.CDEK_ACCOUNT_MODE,
+      apiUrlMatchesMode: matchesUrl(env.CDEK_API_URL, expectedCdekUrl),
+      senderCityConfigured: Boolean(env.CDEK_SENDER_CITY_CODE),
+      defaultTariffConfigured: Boolean(env.CDEK_DEFAULT_TARIFF_CODE),
+    },
+    robokassa: {
+      configured: Boolean(
+        env.ROBOKASSA_MERCHANT_LOGIN &&
+        env.ROBOKASSA_PASSWORD_1 &&
+        env.ROBOKASSA_PASSWORD_2
+      ),
+      testMode: env.ROBOKASSA_TEST_MODE === "true",
+      hashAlgorithm: env.ROBOKASSA_HASH_ALGORITHM,
+      resultUrlMatches: matchesUrl(
+        env.ROBOKASSA_RESULT_URL,
+        `${siteUrl}/api/payments/robokassa/result`,
+      ),
+      successUrlMatches: matchesUrl(
+        env.ROBOKASSA_SUCCESS_URL,
+        `${siteUrl}/payment/success`,
+      ),
+      failUrlMatches: matchesUrl(
+        env.ROBOKASSA_FAIL_URL,
+        `${siteUrl}/payment/fail`,
+      ),
+    },
+  };
+}
+
 export function assertCdekConfigured() {
-  if (
-    !env.CDEK_CLIENT_ID ||
-    !env.CDEK_CLIENT_SECRET ||
-    !env.CDEK_SENDER_CITY_CODE
-  ) {
-    throw new Error("СДЭК не настроен. Заполните CDEK_CLIENT_ID, CDEK_CLIENT_SECRET и CDEK_SENDER_CITY_CODE.");
+  const configuration = getIntegrationConfiguration().cdek;
+  if (!configuration.configured) {
+    throw new Error("СДЭК не настроен. Заполните credentials, город отправителя и тариф.");
+  }
+  if (!configuration.apiUrlMatchesMode) {
+    throw new Error("CDEK_API_URL не соответствует выбранному CDEK_ACCOUNT_MODE.");
   }
 }
 
 export function assertRobokassaConfigured() {
+  const configuration = getIntegrationConfiguration().robokassa;
+  if (!configuration.configured) {
+    throw new Error("Робокасса не настроена. Заполните логин и оба пароля.");
+  }
   if (
-    !env.ROBOKASSA_MERCHANT_LOGIN ||
-    !env.ROBOKASSA_PASSWORD_1 ||
-    !env.ROBOKASSA_PASSWORD_2
+    !configuration.resultUrlMatches ||
+    !configuration.successUrlMatches ||
+    !configuration.failUrlMatches
   ) {
-    throw new Error("Робокасса не настроена. Заполните логин и оба пароля в environment.");
+    throw new Error("Callback URL Робокассы не соответствуют адресу сайта.");
   }
 }
