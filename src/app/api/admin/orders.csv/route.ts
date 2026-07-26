@@ -13,8 +13,8 @@ export async function GET() {
     ...orders.map((order)=>[
       order.number,order.createdAt.toISOString(),order.customerName,order.phone,order.email,
       order.items.map((item)=>`${item.productName} × ${item.quantity}`).join("; "),
-      order.total.toFixed(2),order.cdekTariffName,order.cdekPointAddress ?? order.deliveryAddress,
-      order.payments.at(-1)?.status ?? "",order.status,
+      order.total?.toFixed(2) ?? "",order.deliveryProvider,order.cdekPointAddress ?? order.deliveryAddress,
+      order.payments.at(-1)?.status ?? "NOT_CREATED",order.status,
     ]),
   ];
   const body = "\uFEFF" + rows.map((row)=>row.map(csv).join(";")).join("\r\n");

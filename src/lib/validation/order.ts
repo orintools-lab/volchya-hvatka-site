@@ -11,19 +11,20 @@ export const quoteSchema = z.object({
 });
 
 export const orderSchema = z.object({
-  quoteId: z.string().min(1),
+  productId: z.string().min(1),
+  deliveryProvider: z.enum(["CDEK", "OZON", "MANUAL"]),
+  quoteId: z.string().min(1).optional(),
   customerName: z.string().trim().min(3).max(200),
   phone: z.string().trim().min(7).max(32),
   email: z.string().email(),
   postalCode: z.string().trim().max(20).optional(),
-  shashkaSize: z.enum(["ADULT", "TEEN", "CHILD", "BY_HEIGHT"]),
-  customerHeight: z.number().int().min(80).max(230).optional(),
+  customerHeight: z.number().int().min(80).max(230),
   comment: z.string().trim().max(1000).optional(),
   privacyAccepted: z.literal(true),
   offerAccepted: z.literal(true),
   utm: z.record(z.string(), z.string().max(200)).optional(),
 }).superRefine((value, context) => {
-  if (value.shashkaSize === "BY_HEIGHT" && !value.customerHeight) {
-    context.addIssue({ code: "custom", path: ["customerHeight"], message: "Укажите рост." });
+  if (value.deliveryProvider === "CDEK" && !value.quoteId) {
+    context.addIssue({ code: "custom", path: ["quoteId"], message: "Подтвердите способ доставки." });
   }
 });

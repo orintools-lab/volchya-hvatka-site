@@ -9,9 +9,9 @@ export async function GET(request: Request) {
   if (query.length < 2) return NextResponse.json([]);
   try {
     return NextResponse.json(await getDeliveryProvider().searchCities(query));
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "СДЭК недоступен." },
+      { error: "СДЭК временно недоступен. Выберите доставку по согласованию." },
       { status: 503 },
     );
   }

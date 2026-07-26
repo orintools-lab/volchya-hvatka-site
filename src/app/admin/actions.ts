@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import { createAdminSession, destroyAdminSession, requireAdmin } from "@/lib/auth/session";
 import { verifyPassword } from "@/lib/auth/password";
+import { assertValidLengthRules } from "@/server/services/length-service";
+import { createPaymentForAgreedOrder } from "@/server/services/order-service";
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -26,7 +28,7 @@ export async function updateOrder(formData: FormData) {
   const admin = await requireAdmin();
   const id = String(formData.get("id"));
   const status = String(formData.get("status")) as
-    | "AWAITING_PAYMENT" | "PAID" | "PROCESSING" | "READY_TO_SHIP"
+    | "AWAITING_DELIVERY_AGREEMENT" | "AWAITING_PAYMENT" | "PAID" | "PROCESSING" | "READY_TO_SHIP"
     | "SHIPPED" | "COMPLETED" | "CANCELLED" | "REFUNDED";
   const adminNote = String(formData.get("adminNote") ?? "").trim();
   const before = await db.order.findUniqueOrThrow({ where: { id } });
@@ -40,6 +42,46 @@ export async function updateOrder(formData: FormData) {
       },
     }),
   ]);
+  revalidatePath(`/admin/orders/${id}`);
+  revalidatePath("/admin/orders");
+}
+
+export async function agreeManualDelivery(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id"));
+  const deliveryPrice = Number(formData.get("deliveryPrice"));
+  const actualLengthCm = Number(formData.get("actualLengthCm"));
+  const deliveryComment = String(formData.get("deliveryComment") ?? "").trim();
+  if (!Number.isFinite(deliveryPrice) || deliveryPrice < 0) throw new Error("Укажите корректную стоимость доставки.");
+  if (!Number.isInteger(actualLengthCm) || actualLengthCm <= 0) throw new Error("Укажите фактическую длину шашек.");
+  const order = await db.order.findUniqueOrThrow({ where: { id } });
+  const total = order.subtotal.add(deliveryPrice);
+  await db.$transaction([
+    db.order.update({
+      where: { id },
+      data: {
+        deliveryPrice,
+        agreedDeliveryPrice: deliveryPrice,
+        deliveryComment,
+        actualLengthCm,
+        deliveryAgreementStatus: "AGREED",
+        deliveryAgreedAt: new Date(),
+        total,
+        status: "AWAITING_PAYMENT",
+      },
+    }),
+    db.orderItem.updateMany({ where: { orderId: id }, data: { actualLengthCm } }),
+    db.auditLog.create({
+      data: {
+        adminId: admin.id,
+        action: "MANUAL_DELIVERY_AGREED",
+        entity: "Order",
+        entityId: id,
+        after: { deliveryPrice, actualLengthCm, total: total.toString() },
+      },
+    }),
+  ]);
+  await createPaymentForAgreedOrder(id);
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/orders");
 }
@@ -151,4 +193,52 @@ export async function saveFaq(formData: FormData) {
   await db.auditLog.create({ data: { adminId: admin.id, action: id ? "FAQ_UPDATED" : "FAQ_CREATED", entity: "FaqItem", entityId: faq.id } });
   revalidatePath("/");
   revalidatePath("/admin/faq");
+}
+
+export async function updateDeliveryProviders(formData: FormData) {
+  const admin = await requireAdmin();
+  for (const provider of ["CDEK", "OZON", "MANUAL"] as const) {
+    await db.deliveryProviderConfig.upsert({
+      where: { provider },
+      update: { isEnabled: formData.get(provider) === "on" },
+      create: {
+        provider,
+        label: provider === "CDEK" ? "СДЭК" : provider === "OZON" ? "Ozon" : "Доставка по согласованию",
+        description: provider === "MANUAL"
+          ? "Менеджер согласует способ и стоимость доставки после заявки."
+          : "Автоматический расчёт доставки.",
+        isEnabled: formData.get(provider) === "on",
+      },
+    });
+  }
+  await db.auditLog.create({
+    data: { adminId: admin.id, action: "DELIVERY_PROVIDERS_UPDATED", entity: "DeliveryProviderConfig" },
+  });
+  revalidatePath("/admin/settings/delivery");
+}
+
+export async function saveLengthRule(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const candidate = {
+    id: id || undefined,
+    minHeightCm: Number(formData.get("minHeightCm")),
+    maxHeightCm: Number(formData.get("maxHeightCm")),
+    lengthCm: Number(formData.get("lengthCm")),
+    label: String(formData.get("label") ?? "").trim(),
+    isActive: formData.get("isActive") === "on",
+  };
+  const existing = await db.lengthRule.findMany();
+  assertValidLengthRules([
+    ...existing.filter((rule) => rule.id !== id),
+    candidate,
+  ]);
+  if (!candidate.label) throw new Error("Укажите название диапазона.");
+  const rule = id
+    ? await db.lengthRule.update({ where: { id }, data: candidate })
+    : await db.lengthRule.create({ data: candidate });
+  await db.auditLog.create({
+    data: { adminId: admin.id, action: id ? "LENGTH_RULE_UPDATED" : "LENGTH_RULE_CREATED", entity: "LengthRule", entityId: rule.id },
+  });
+  revalidatePath("/admin/products/length-rules");
 }

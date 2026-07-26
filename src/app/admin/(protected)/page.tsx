@@ -18,7 +18,7 @@ export default async function Dashboard() {
     </section>
     <section className="admin-panel"><h2>Последние заказы</h2>
       <div className="admin-list">{latest.map((order) => <a href={`/admin/orders/${order.id}`} key={order.id}>
-        <strong>{order.number}</strong><span>{order.customerName}</span><span>{order.total.toFixed(2)} ₽</span><span>{order.status}</span>
+        <strong>{order.number}</strong><span>{order.customerName}</span><span>{order.total?.toFixed(2) ?? "согласование"} ₽</span><span>{order.status}</span>
       </a>)}</div>
     </section>
   </>;

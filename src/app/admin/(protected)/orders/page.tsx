@@ -24,15 +24,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     <form className="admin-filters">
       <input name="q" defaultValue={q} placeholder="Номер, имя, телефон или email" />
       <select name="status" defaultValue={status}><option value="">Все статусы</option>
-        {["NEW","AWAITING_PAYMENT","PAID","PROCESSING","READY_TO_SHIP","SHIPPED","COMPLETED","CANCELLED","REFUNDED"].map((item)=><option key={item}>{item}</option>)}
+        {["NEW","AWAITING_DELIVERY_AGREEMENT","AWAITING_PAYMENT","PAID","PROCESSING","READY_TO_SHIP","SHIPPED","COMPLETED","CANCELLED","REFUNDED"].map((item)=><option key={item}>{item}</option>)}
       </select><button className="button">Найти</button>
     </form>
     <div className="admin-table">
       <div className="admin-row admin-table-head"><span>Заказ</span><span>Покупатель</span><span>Сумма</span><span>Оплата</span><span>Статус</span></div>
       {orders.map((order)=><a className="admin-row" href={`/admin/orders/${order.id}`} key={order.id}>
         <span><strong>{order.number}</strong><small>{order.createdAt.toLocaleString("ru-RU")}</small></span>
-        <span>{order.customerName}<small>{order.phone}</small></span><span>{order.total.toFixed(2)} ₽</span>
-        <span>{order.payments.at(-1)?.status ?? "—"}</span><span>{order.status}</span>
+        <span>{order.customerName}<small>{order.phone}</small></span><span>{order.total?.toFixed(2) ?? "согласование"} ₽</span>
+        <span>{order.payments.at(-1)?.status ?? "NOT_CREATED"}</span><span>{order.status}</span>
       </a>)}
     </div>
   </>;

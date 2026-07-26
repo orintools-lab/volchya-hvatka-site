@@ -22,16 +22,19 @@ async function main() {
 
   await prisma.product.upsert({
     where: { slug: "start" },
-    update: {},
+    update: {
+      description: "Тренировочные шашки из берёзовой фанеры. Каждая шашка тщательно обрабатывается и шлифуется вручную. В комплект входит пошаговый базовый видеокурс.",
+      composition: ["2 тренировочные шашки из берёзовой фанеры", "Базовый видеокурс", "Доступ после оплаты"],
+    },
     create: {
       slug: "start",
       category: ProductCategory.MAIN,
       name: "Комплект «Старт»",
       subtitle: "Тренировочные шашки и базовый курс",
-      description: "Две тренировочные шашки и пошаговый базовый видеокурс.",
+      description: "Тренировочные шашки из берёзовой фанеры. Каждая шашка тщательно обрабатывается и шлифуется вручную. В комплект входит пошаговый базовый видеокурс.",
       price: 4990,
       oldPrice: 5990,
-      composition: ["2 тренировочные шашки", "Базовый видеокурс", "Доступ после оплаты"],
+      composition: ["2 тренировочные шашки из берёзовой фанеры", "Базовый видеокурс", "Доступ после оплаты"],
       benefits: ["Обучение с нуля", "Занятия дома или на улице"],
       badge: "Самый популярный",
       sortOrder: 10,
@@ -45,16 +48,19 @@ async function main() {
 
   await prisma.product.upsert({
     where: { slug: "master" },
-    update: {},
+    update: {
+      description: "Тренировочные шашки из берёзовой фанеры. Каждая шашка тщательно обрабатывается и шлифуется вручную. В комплект входит полный курс «Мастер».",
+      composition: ["2 тренировочные шашки из берёзовой фанеры", "Полный курс «Мастер»", "Доступ после оплаты"],
+    },
     create: {
       slug: "master",
       category: ProductCategory.MAIN,
       name: "Комплект «Мастер»",
       subtitle: "Тренировочные шашки и полный курс",
-      description: "Две тренировочные шашки и полный курс «Мастер».",
+      description: "Тренировочные шашки из берёзовой фанеры. Каждая шашка тщательно обрабатывается и шлифуется вручную. В комплект входит полный курс «Мастер».",
       price: 7990,
       oldPrice: 8990,
-      composition: ["2 тренировочные шашки", "Полный курс «Мастер»", "Доступ после оплаты"],
+      composition: ["2 тренировочные шашки из берёзовой фанеры", "Полный курс «Мастер»", "Доступ после оплаты"],
       benefits: ["Базовые и продвинутые элементы", "Последовательная программа"],
       sortOrder: 20,
       weightGrams: 1200,
@@ -178,15 +184,50 @@ async function main() {
     });
   }
 
+  const deliveryProviders = [
+    {
+      provider: "CDEK" as const,
+      isEnabled: true,
+      label: "СДЭК",
+      description: "Доставка в пункт выдачи или курьером после расчёта.",
+    },
+    {
+      provider: "OZON" as const,
+      isEnabled: false,
+      label: "Ozon",
+      description: "Интеграция не подключена.",
+    },
+    {
+      provider: "MANUAL" as const,
+      isEnabled: true,
+      label: "Доставка по согласованию",
+      description: "После оформления заказа мы свяжемся с вами, уточним удобный способ доставки и её стоимость.",
+    },
+  ];
+  for (const provider of deliveryProviders) {
+    await prisma.deliveryProviderConfig.upsert({
+      where: { provider: provider.provider },
+      update: {
+        label: provider.label,
+        description: provider.description,
+      },
+      create: provider,
+    });
+  }
+
   const faq = [
     ["Безопасны ли тренировочные шашки?", "Они предназначены для последовательной тренировочной практики. Соблюдайте дистанцию и рекомендации курса."],
     ["С какого возраста можно заниматься?", "Подросткам рекомендуется заниматься с учётом роста, координации и под контролем взрослого."],
-    ["Как подобрать размер?", "Выберите возрастной вариант или укажите рост — мы поможем подобрать размер."],
+    ["Как подобрать размер?", "Укажите рост при оформлении заказа — система предложит настроенную длину, а при необходимости менеджер уточнит её лично."],
     ["Когда открывается доступ к курсу?", "Доступ предоставляется после подтверждённой оплаты."],
   ];
   for (const [index, item] of faq.entries()) {
     const existing = await prisma.faqItem.findFirst({ where: { question: item[0] } });
-    if (!existing) await prisma.faqItem.create({ data: { question: item[0], answer: item[1], sortOrder: index * 10 } });
+    if (existing) {
+      await prisma.faqItem.update({ where: { id: existing.id }, data: { answer: item[1], sortOrder: index * 10 } });
+    } else {
+      await prisma.faqItem.create({ data: { question: item[0], answer: item[1], sortOrder: index * 10 } });
+    }
   }
 
   const reviews = [

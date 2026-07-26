@@ -11,9 +11,9 @@ export async function GET(request: Request) {
   }
   try {
     return NextResponse.json(await getDeliveryProvider().getPickupPoints(cityCode));
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "СДЭК недоступен." },
+      { error: "СДЭК временно недоступен. Выберите доставку по согласованию." },
       { status: 503 },
     );
   }

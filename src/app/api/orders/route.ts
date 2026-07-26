@@ -16,8 +16,20 @@ export async function POST(request: Request) {
   try {
     return NextResponse.json(await createOrder(parsed.data), { status: 201 });
   } catch (error) {
+    const publicMessages = [
+      "Этот способ доставки пока недоступен.",
+      "Товар больше недоступен.",
+      "Подтвердите способ доставки.",
+      "Для указанного роста длина пока не настроена.",
+      "Состав заказа изменился. Повторите расчёт.",
+      "Расчёт доставки истёк. Выполните расчёт снова.",
+      "Стоимость или тариф доставки изменились. Подтвердите новый расчёт.",
+    ];
+    const message = error instanceof Error && publicMessages.includes(error.message)
+      ? error.message
+      : "Не удалось создать заказ. Попробуйте ещё раз или выберите доставку по согласованию.";
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Не удалось создать заказ." },
+      { error: message },
       { status: 422 },
     );
   }

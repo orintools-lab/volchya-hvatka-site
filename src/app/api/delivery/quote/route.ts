@@ -12,9 +12,9 @@ export async function POST(request: Request) {
   }
   try {
     return NextResponse.json(await createDeliveryQuote(parsed.data));
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Не удалось рассчитать доставку." },
+      { error: "Не удалось рассчитать доставку. Выберите доставку по согласованию." },
       { status: 422 },
     );
   }

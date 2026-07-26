@@ -4,11 +4,13 @@ import { orderSchema, quoteSchema } from "../src/lib/validation/order";
 describe("order validation", () => {
   it("не принимает клиентскую цену товара и доставки как часть контракта", () => {
     const input = {
+      productId: "product-1",
+      deliveryProvider: "CDEK",
       quoteId: "quote-1",
       customerName: "Иван Иванов",
       phone: "+79990000000",
       email: "ivan@example.com",
-      shashkaSize: "ADULT",
+      customerHeight: 175,
       privacyAccepted: true,
       offerAccepted: true,
       productPrice: 1,
@@ -21,17 +23,43 @@ describe("order validation", () => {
     expect(parsed).not.toHaveProperty("total");
   });
 
-  it("требует рост для подбора размера", () => {
+  it("требует рост покупателя", () => {
     const result = orderSchema.safeParse({
-      quoteId: "quote-1",
+      productId: "product-1",
+      deliveryProvider: "MANUAL",
       customerName: "Иван Иванов",
       phone: "+79990000000",
       email: "ivan@example.com",
-      shashkaSize: "BY_HEIGHT",
       privacyAccepted: true,
       offerAccepted: true,
     });
     expect(result.success).toBe(false);
+  });
+
+  it("позволяет ручную доставку без расчёта и quoteId", () => {
+    expect(orderSchema.safeParse({
+      productId: "product-1",
+      deliveryProvider: "MANUAL",
+      customerName: "Иван Иванов",
+      phone: "+79990000000",
+      email: "ivan@example.com",
+      customerHeight: 175,
+      privacyAccepted: true,
+      offerAccepted: true,
+    }).success).toBe(true);
+  });
+
+  it("не позволяет СДЭК без серверной котировки", () => {
+    expect(orderSchema.safeParse({
+      productId: "product-1",
+      deliveryProvider: "CDEK",
+      customerName: "Иван Иванов",
+      phone: "+79990000000",
+      email: "ivan@example.com",
+      customerHeight: 175,
+      privacyAccepted: true,
+      offerAccepted: true,
+    }).success).toBe(false);
   });
 
   it("не позволяет запросить расчёт без выбранного товара и города", () => {

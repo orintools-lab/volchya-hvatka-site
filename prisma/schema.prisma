@@ -14,6 +14,7 @@ enum ProductCategory {
 
 enum OrderStatus {
   NEW
+  AWAITING_DELIVERY_AGREEMENT
   AWAITING_PAYMENT
   PAID
   PROCESSING
@@ -25,6 +26,7 @@ enum OrderStatus {
 }
 
 enum PaymentStatus {
+  NOT_CREATED
   PENDING
   SUCCEEDED
   FAILED
@@ -32,8 +34,18 @@ enum PaymentStatus {
   REFUNDED
 }
 
-enum DeliveryMethod {
+enum DeliveryProvider {
   CDEK
+  OZON
+  MANUAL
+
+  @@map("DeliveryMethod")
+}
+
+enum DeliveryAgreementStatus {
+  NOT_REQUIRED
+  PENDING
+  AGREED
 }
 
 enum DeliveryType {
@@ -69,46 +81,46 @@ model AdminUser {
 }
 
 model Product {
-  id          String          @id @default(cuid())
-  slug        String          @unique
-  category    ProductCategory
-  name        String
-  subtitle    String?
-  description String
-  price       Decimal         @db.Decimal(12, 2)
-  oldPrice    Decimal?        @db.Decimal(12, 2)
-  composition String[]
-  benefits    String[]
-  imageUrl    String?
-  badge       String?
-  buttonLabel String          @default("Купить комплект")
-  weightGrams Int             @default(1000)
-  lengthCm    Int             @default(30)
-  widthCm     Int             @default(20)
-  heightCm    Int             @default(10)
-  packageCount Int            @default(1)
-  sortOrder   Int             @default(0)
-  isActive    Boolean         @default(true)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  orderItems  OrderItem[]
+  id           String          @id @default(cuid())
+  slug         String          @unique
+  category     ProductCategory
+  name         String
+  subtitle     String?
+  description  String
+  price        Decimal         @db.Decimal(12, 2)
+  oldPrice     Decimal?        @db.Decimal(12, 2)
+  composition  String[]
+  benefits     String[]
+  imageUrl     String?
+  badge        String?
+  buttonLabel  String          @default("Купить комплект")
+  weightGrams  Int             @default(1000)
+  lengthCm     Int             @default(30)
+  widthCm      Int             @default(20)
+  heightCm     Int             @default(10)
+  packageCount Int             @default(1)
+  sortOrder    Int             @default(0)
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  orderItems   OrderItem[]
 
   @@index([category, isActive, sortOrder])
 }
 
 model Review {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   authorName     String
   city           String?
   text           String
   rating         Int
   imageUrl       String?
   reviewDate     DateTime?
-  showOnHomepage Boolean  @default(false)
-  isVisible      Boolean  @default(true)
-  sortOrder      Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  showOnHomepage Boolean   @default(false)
+  isVisible      Boolean   @default(true)
+  sortOrder      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([isVisible, showOnHomepage, sortOrder])
 }
@@ -162,41 +174,50 @@ model Media {
 }
 
 model Order {
-  id             String          @id @default(cuid())
-  number         String          @unique
-  status         OrderStatus     @default(NEW)
-  customerName   String
-  phone          String
-  email          String
-  city           String
-  postalCode     String?
-  deliveryMethod DeliveryMethod
-  deliveryType   DeliveryType
-  deliveryAddress String?
-  cdekCityCode   Int
-  cdekPointCode  String?
-  cdekPointName  String?
-  cdekPointAddress String?
-  cdekTariffCode Int
-  cdekTariffName String
-  deliveryMinDays Int?
-  deliveryMaxDays Int?
-  deliveryQuoteId String
-  deliveryQuotedAt DateTime
-  cdekOrderUuid  String?
-  cdekNumber     String?
-  shashkaSize    ShashkaSize
-  customerHeight Int?
-  customerComment String?
-  adminNote      String?
-  subtotal       Decimal         @db.Decimal(12, 2)
-  deliveryPrice  Decimal         @default(0) @db.Decimal(12, 2)
-  total          Decimal         @db.Decimal(12, 2)
-  utm            Json?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  items          OrderItem[]
-  payments       Payment[]
+  id                      String                  @id @default(cuid())
+  number                  String                  @unique
+  status                  OrderStatus             @default(NEW)
+  customerName            String
+  phone                   String
+  email                   String
+  city                    String?
+  postalCode              String?
+  deliveryProvider        DeliveryProvider        @map("deliveryMethod")
+  deliveryType            DeliveryType?
+  deliveryAddress         String?
+  cdekCityCode            Int?
+  cdekPointCode           String?
+  cdekPointName           String?
+  cdekPointAddress        String?
+  cdekTariffCode          Int?
+  cdekTariffName          String?
+  deliveryMinDays         Int?
+  deliveryMaxDays         Int?
+  deliveryQuoteId         String?
+  deliveryQuotedAt        DateTime?
+  cdekOrderUuid           String?
+  cdekNumber              String?
+  shashkaSize             ShashkaSize
+  customerHeight          Int?
+  recommendedLengthCm     Int?
+  actualLengthCm          Int?
+  secondActualLengthCm    Int?
+  shashkaCount            Int                     @default(2)
+  material                String                  @default("Берёзовая фанера")
+  deliveryAgreementStatus DeliveryAgreementStatus @default(NOT_REQUIRED)
+  agreedDeliveryPrice     Decimal?                @db.Decimal(12, 2)
+  deliveryComment         String?
+  deliveryAgreedAt        DateTime?
+  customerComment         String?
+  adminNote               String?
+  subtotal                Decimal                 @db.Decimal(12, 2)
+  deliveryPrice           Decimal?                @db.Decimal(12, 2)
+  total                   Decimal?                @db.Decimal(12, 2)
+  utm                     Json?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  items                   OrderItem[]
+  payments                Payment[]
 
   @@index([status, createdAt])
   @@index([email])
@@ -204,38 +225,43 @@ model Order {
 }
 
 model OrderItem {
-  id          String  @id @default(cuid())
-  orderId     String
-  productId   String?
-  productName String
-  productSlug String
-  unitPrice   Decimal @db.Decimal(12, 2)
-  quantity    Int
-  total       Decimal @db.Decimal(12, 2)
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  id                   String   @id @default(cuid())
+  orderId              String
+  productId            String?
+  productName          String
+  productSlug          String
+  unitPrice            Decimal  @db.Decimal(12, 2)
+  quantity             Int
+  total                Decimal  @db.Decimal(12, 2)
+  recommendedLengthCm  Int?
+  actualLengthCm       Int?
+  secondActualLengthCm Int?
+  shashkaCount         Int      @default(2)
+  material             String   @default("Берёзовая фанера")
+  order                Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product              Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([productId])
 }
 
 model Payment {
-  id                String        @id @default(cuid())
+  id                String         @id @default(cuid())
   orderId           String
   provider          String
   providerPaymentId String?
-  invoiceId         Int           @unique
-  idempotencyKey    String        @unique
-  status            PaymentStatus @default(PENDING)
-  amount            Decimal       @db.Decimal(12, 2)
+  invoiceId         Int            @unique
+  idempotencyKey    String         @unique
+  status            PaymentStatus  @default(PENDING)
+  amount            Decimal        @db.Decimal(12, 2)
   payload           Json?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  order             Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   events            PaymentEvent[]
 
-  @@index([orderId, status])
   @@unique([provider, providerPaymentId])
+  @@index([orderId, status])
 }
 
 model Session {
@@ -259,31 +285,55 @@ model PaymentEvent {
   processedAt     DateTime @default(now())
   payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
-  @@index([paymentId, processedAt])
   @@unique([paymentId, externalEventId])
+  @@index([paymentId, processedAt])
 }
 
 model DeliveryQuote {
-  id              String       @id @default(cuid())
-  productId       String
-  quantity        Int
-  cityCode        Int
-  cityName        String
-  deliveryType    DeliveryType
-  pointCode       String?
-  pointName       String?
-  pointAddress    String?
-  address         String?
-  tariffCode      Int
-  tariffName      String
-  price           Decimal      @db.Decimal(12, 2)
-  minDays         Int?
-  maxDays         Int?
-  expiresAt       DateTime
-  createdAt       DateTime     @default(now())
+  id           String           @id @default(cuid())
+  productId    String
+  quantity     Int
+  provider     DeliveryProvider @default(CDEK)
+  cityCode     Int
+  cityName     String
+  deliveryType DeliveryType
+  pointCode    String?
+  pointName    String?
+  pointAddress String?
+  address      String?
+  tariffCode   Int
+  tariffName   String
+  price        Decimal          @db.Decimal(12, 2)
+  minDays      Int?
+  maxDays      Int?
+  expiresAt    DateTime
+  createdAt    DateTime         @default(now())
 
   @@index([expiresAt])
   @@index([productId])
+}
+
+model DeliveryProviderConfig {
+  provider    DeliveryProvider @id
+  isEnabled   Boolean          @default(false)
+  label       String
+  description String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model LengthRule {
+  id          String   @id @default(cuid())
+  minHeightCm Int
+  maxHeightCm Int
+  lengthCm    Int
+  label       String
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, minHeightCm, maxHeightCm])
 }
 
 model AuditLog {

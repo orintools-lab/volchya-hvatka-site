@@ -1,8 +1,12 @@
 import { randomInt } from "node:crypto";
 import { db } from "@/lib/db/client";
 import { RobokassaPaymentProvider } from "@/lib/payments/robokassa";
-import { revalidateDeliveryQuote } from "./delivery-service";
 import { sendPaidOrderNotifications } from "@/lib/notifications/email";
+import { revalidateDeliveryQuote } from "./delivery-service";
+import { findLengthRecommendation } from "./length-service";
+import { manualOrderState, SHASHKA_MATERIAL } from "./manual-order";
+
+const MATERIAL = SHASHKA_MATERIAL;
 
 function orderNumber() {
   const date = new Date();
@@ -12,33 +16,87 @@ function orderNumber() {
 async function uniqueInvoiceId() {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const candidate = randomInt(1000000, 2147483647);
-    const exists = await db.payment.findUnique({ where: { invoiceId: candidate } });
-    if (!exists) return candidate;
+    if (!(await db.payment.findUnique({ where: { invoiceId: candidate } }))) return candidate;
   }
   throw new Error("Не удалось сформировать номер счёта.");
 }
 
-export async function createOrder(input: {
-  quoteId: string;
+type CreateOrderInput = {
+  productId: string;
+  deliveryProvider: "CDEK" | "OZON" | "MANUAL";
+  quoteId?: string;
   customerName: string;
   phone: string;
   email: string;
   postalCode?: string;
-  shashkaSize: "ADULT" | "TEEN" | "CHILD" | "BY_HEIGHT";
-  customerHeight?: number;
+  customerHeight: number;
   comment?: string;
   utm?: Record<string, string>;
-}) {
-  const quote = await revalidateDeliveryQuote(input.quoteId);
-  const product = await db.product.findFirst({
-    where: { id: quote.productId, isActive: true },
-  });
-  if (!product) throw new Error("Товар больше недоступен.");
+};
 
-  const subtotal = product.price.mul(quote.quantity);
-  const total = subtotal.add(quote.price);
+export async function createOrder(input: CreateOrderInput) {
+  if (input.deliveryProvider === "OZON") {
+    throw new Error("Этот способ доставки пока недоступен.");
+  }
+  const product = await db.product.findFirst({ where: { id: input.productId, isActive: true } });
+  if (!product) throw new Error("Товар больше недоступен.");
+  const rules = await db.lengthRule.findMany({
+    where: { isActive: true },
+    orderBy: [{ minHeightCm: "asc" }, { sortOrder: "asc" }],
+  });
+  const recommendation = findLengthRecommendation(rules, input.customerHeight);
+  const subtotal = product.price;
+  if (!recommendation) {
+    throw new Error("Для указанного роста длина пока не настроена.");
+  }
+
+  if (input.deliveryProvider === "MANUAL") {
+    const order = await db.order.create({
+      data: {
+        number: orderNumber(),
+        ...manualOrderState({
+          customerHeight: input.customerHeight,
+          recommendedLengthCm: recommendation.lengthCm,
+        }),
+        customerName: input.customerName,
+        phone: input.phone,
+        email: input.email,
+        postalCode: input.postalCode,
+        shashkaSize: "BY_HEIGHT",
+        customerComment: input.comment,
+        subtotal,
+        utm: input.utm,
+        items: {
+          create: {
+            productId: product.id,
+            productName: product.name,
+            productSlug: product.slug,
+            unitPrice: product.price,
+            quantity: 1,
+            total: subtotal,
+            recommendedLengthCm: recommendation.lengthCm,
+            actualLengthCm: recommendation.lengthCm,
+            shashkaCount: 2,
+            material: MATERIAL,
+          },
+        },
+      },
+    });
+    return {
+      orderId: order.id,
+      orderNumber: order.number,
+      requiresPayment: false,
+      total: null,
+      message: "Заявка принята. Мы свяжемся с вами, согласуем доставку и отправим ссылку на оплату.",
+    };
+  }
+
+  if (!input.quoteId) throw new Error("Подтвердите способ доставки.");
+  const quote = await revalidateDeliveryQuote(input.quoteId);
+  if (quote.productId !== product.id) throw new Error("Состав заказа изменился. Повторите расчёт.");
+  const cdekSubtotal = product.price.mul(quote.quantity);
+  const total = cdekSubtotal.add(quote.price);
   const invoiceId = await uniqueInvoiceId();
-  const idempotencyKey = `robokassa:${invoiceId}`;
 
   const result = await db.$transaction(async (transaction) => {
     const order = await transaction.order.create({
@@ -50,7 +108,7 @@ export async function createOrder(input: {
         email: input.email,
         city: quote.cityName,
         postalCode: input.postalCode,
-        deliveryMethod: "CDEK",
+        deliveryProvider: "CDEK",
         deliveryType: quote.deliveryType,
         deliveryAddress: quote.address ?? quote.pointAddress,
         cdekCityCode: quote.cityCode,
@@ -63,10 +121,14 @@ export async function createOrder(input: {
         deliveryMaxDays: quote.maxDays,
         deliveryQuoteId: quote.id,
         deliveryQuotedAt: new Date(),
-        shashkaSize: input.shashkaSize,
+        shashkaSize: "BY_HEIGHT",
         customerHeight: input.customerHeight,
+        recommendedLengthCm: recommendation.lengthCm,
+        actualLengthCm: recommendation.lengthCm,
+        shashkaCount: 2,
+        material: MATERIAL,
         customerComment: input.comment,
-        subtotal,
+        subtotal: cdekSubtotal,
         deliveryPrice: quote.price,
         total,
         utm: input.utm,
@@ -77,7 +139,11 @@ export async function createOrder(input: {
             productSlug: product.slug,
             unitPrice: product.price,
             quantity: quote.quantity,
-            total: subtotal,
+            total: cdekSubtotal,
+            recommendedLengthCm: recommendation.lengthCm,
+            actualLengthCm: recommendation.lengthCm,
+            shashkaCount: 2,
+            material: MATERIAL,
           },
         },
       },
@@ -87,26 +153,57 @@ export async function createOrder(input: {
         orderId: order.id,
         provider: "robokassa",
         invoiceId,
-        idempotencyKey,
+        idempotencyKey: `robokassa:${invoiceId}`,
         status: "PENDING",
         amount: total,
       },
     });
     return { order, payment };
   });
-
-  const paymentUrl = new RobokassaPaymentProvider().createPaymentUrl({
-    invoiceId,
-    amount: total.toFixed(2),
-    description: `Оплата заказа ${result.order.number}`,
-    email: result.order.email,
-  });
   return {
     orderId: result.order.id,
     orderNumber: result.order.number,
-    paymentUrl,
+    requiresPayment: true,
+    paymentUrl: new RobokassaPaymentProvider().createPaymentUrl({
+      invoiceId,
+      amount: total.toFixed(2),
+      description: `Оплата заказа ${result.order.number}`,
+      email: result.order.email,
+    }),
     total: total.toFixed(2),
   };
+}
+
+export async function createPaymentForAgreedOrder(orderId: string) {
+  const order = await db.order.findUnique({ where: { id: orderId }, include: { payments: true } });
+  if (!order || !order.total || order.deliveryAgreementStatus !== "AGREED") {
+    throw new Error("Сначала согласуйте стоимость доставки.");
+  }
+  const existing = order.payments.find((payment) => payment.status === "PENDING");
+  if (existing?.providerPaymentId) return existing.providerPaymentId;
+  const invoiceId = existing?.invoiceId ?? await uniqueInvoiceId();
+  const paymentUrl = new RobokassaPaymentProvider().createPaymentUrl({
+    invoiceId,
+    amount: order.total.toFixed(2),
+    description: `Оплата заказа ${order.number}`,
+    email: order.email,
+  });
+  if (existing) {
+    await db.payment.update({ where: { id: existing.id }, data: { providerPaymentId: paymentUrl } });
+  } else {
+    await db.payment.create({
+      data: {
+        orderId,
+        provider: "robokassa",
+        invoiceId,
+        idempotencyKey: `robokassa:${invoiceId}`,
+        status: "PENDING",
+        amount: order.total,
+        providerPaymentId: paymentUrl,
+      },
+    });
+  }
+  return paymentUrl;
 }
 
 export async function processRobokassaResult(input: {
@@ -116,19 +213,11 @@ export async function processRobokassaResult(input: {
   payload: Record<string, string>;
 }) {
   const provider = new RobokassaPaymentProvider();
-  if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(input.amount)) {
-    throw new Error("Некорректная сумма платежа.");
-  }
+  if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(input.amount)) throw new Error("Некорректная сумма платежа.");
   if (!provider.verifyResult(input)) throw new Error("Некорректная подпись.");
-
-  const payment = await db.payment.findUnique({
-    where: { invoiceId: input.invoiceId },
-    include: { order: true },
-  });
+  const payment = await db.payment.findUnique({ where: { invoiceId: input.invoiceId }, include: { order: true } });
   if (!payment) throw new Error("Платёж не найден.");
-  if (!payment.amount.equals(input.amount)) {
-    throw new Error("Сумма платежа не совпадает.");
-  }
+  if (!payment.amount.equals(input.amount)) throw new Error("Сумма платежа не совпадает.");
   if (payment.status === "SUCCEEDED") return `OK${input.invoiceId}`;
 
   const processed = await db.$transaction(async (transaction) => {
@@ -138,32 +227,16 @@ export async function processRobokassaResult(input: {
     });
     if (claimed.count === 0) return false;
     await transaction.paymentEvent.create({
-      data: {
-        paymentId: payment.id,
-        externalEventId: `result:${input.invoiceId}`,
-        eventType: "ROBOKASSA_RESULT",
-        payload: input.payload,
-      },
+      data: { paymentId: payment.id, externalEventId: `result:${input.invoiceId}`, eventType: "ROBOKASSA_RESULT", payload: input.payload },
     });
-    await transaction.order.update({
-      where: { id: payment.orderId },
-      data: { status: "PAID" },
-    });
+    await transaction.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } });
     await transaction.auditLog.create({
-      data: {
-        action: "PAYMENT_CONFIRMED",
-        entity: "Order",
-        entityId: payment.orderId,
-        after: { invoiceId: input.invoiceId, amount: input.amount },
-      },
+      data: { action: "PAYMENT_CONFIRMED", entity: "Order", entityId: payment.orderId, after: { invoiceId: input.invoiceId, amount: input.amount } },
     });
     return true;
   });
   if (!processed) return `OK${input.invoiceId}`;
-  const paidOrder = await db.order.findUniqueOrThrow({
-    where: { id: payment.orderId },
-    include: { items: true },
-  });
+  const paidOrder = await db.order.findUniqueOrThrow({ where: { id: payment.orderId }, include: { items: true } });
   try {
     const notification = await sendPaidOrderNotifications({
       number: paidOrder.number,
@@ -171,25 +244,17 @@ export async function processRobokassaResult(input: {
       phone: paidOrder.phone,
       email: paidOrder.email,
       products: paidOrder.items.map((item) => `${item.productName} × ${item.quantity}`).join(", "),
-      amount: paidOrder.total.toFixed(2),
-      delivery: `${paidOrder.cdekTariffName}: ${paidOrder.cdekPointAddress ?? paidOrder.deliveryAddress}`,
+      amount: paidOrder.total?.toFixed(2) ?? "не согласована",
+      delivery: paidOrder.deliveryProvider === "CDEK"
+        ? `${paidOrder.cdekTariffName}: ${paidOrder.cdekPointAddress ?? paidOrder.deliveryAddress}`
+        : "Доставка по согласованию",
     });
     await db.auditLog.create({
-      data: {
-        action: notification.sent ? "PAYMENT_EMAIL_SENT" : "PAYMENT_EMAIL_SKIPPED",
-        entity: "Order",
-        entityId: paidOrder.id,
-        after: notification,
-      },
+      data: { action: notification.sent ? "PAYMENT_EMAIL_SENT" : "PAYMENT_EMAIL_SKIPPED", entity: "Order", entityId: paidOrder.id, after: notification },
     });
   } catch (error) {
     await db.auditLog.create({
-      data: {
-        action: "PAYMENT_EMAIL_FAILED",
-        entity: "Order",
-        entityId: paidOrder.id,
-        after: { message: error instanceof Error ? error.message : "Unknown email error" },
-      },
+      data: { action: "PAYMENT_EMAIL_FAILED", entity: "Order", entityId: paidOrder.id, after: { message: error instanceof Error ? error.message : "Unknown email error" } },
     });
   }
   return `OK${input.invoiceId}`;
