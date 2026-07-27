@@ -10,6 +10,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/privacy",
     "/offer",
     "/contacts",
+    "/seller-details",
   ];
 
   return pages.map((path, index) => ({

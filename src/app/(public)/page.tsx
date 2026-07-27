@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 import { db } from "@/lib/db/client";
 import { Checkout } from "@/components/public/checkout";
 import { getCheckoutPaymentMode } from "@/server/services/checkout-payment-mode";
@@ -247,18 +246,6 @@ export default async function HomePage() {
         )}
       </main>
 
-      <footer id="contacts">
-        <Image src="/brand/logo-white.png" alt="Волчья Хватка" width={640} height={540} />
-        <p>Тренировочные шашки и обучение фланкировке с 2015 года.</p>
-        <nav aria-label="Юридическая информация">
-          <Link href="/privacy">Конфиденциальность</Link>
-          <Link href="/offer">Оферта</Link>
-          <Link href="/delivery">Доставка</Link>
-          <Link href="/payment">Оплата</Link>
-          <Link href="/returns">Возврат</Link>
-          <Link href="/contacts">Контакты</Link>
-        </nav>
-      </footer>
     </>
   );
 }

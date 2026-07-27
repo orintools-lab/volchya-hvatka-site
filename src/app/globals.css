@@ -86,6 +86,12 @@ h3 { font-size:24px; margin:8px 0 14px; }
 footer { padding:64px max(20px,calc((100vw - 1200px)/2)); background:#0a0a0a; display:grid; grid-template-columns:220px 1fr; gap:24px 48px; align-items:center; }
 footer img { width:210px; height:auto; }
 footer nav { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:22px; border-top:1px solid rgba(246,241,234,.12); padding-top:24px; }
+.seller-summary { margin-top:18px; color:rgba(246,241,234,.82); font-size:15px; line-height:1.55; }
+.seller-summary p { margin:4px 0; }
+.seller-details-list { max-width:760px; display:grid; gap:0; margin:32px 0; }
+.seller-details-list div { display:grid; grid-template-columns:minmax(180px, .7fr) 1.3fr; gap:20px; padding:15px 0; border-bottom:1px solid rgba(18,18,18,.12); }
+.seller-details-list dt { font-weight:800; }
+.seller-details-list dd { margin:0; overflow-wrap:anywhere; }
 .modal-backdrop { position:fixed; inset:0; z-index:100; background:rgba(0,0,0,.78); display:grid; place-items:center; padding:20px; overflow:auto; }
 .order-modal { background:#f6f1ea; color:#121212; width:min(760px,100%); max-height:calc(100vh - 40px); overflow:auto; border-radius:20px; padding:34px; position:relative; }
 .close { position:absolute; right:18px; top:12px; width:48px; height:48px; border:0; background:transparent; font-size:32px; cursor:pointer; }
@@ -206,4 +212,5 @@ footer nav { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:22px; border-to
   .admin-table-head { display:none; }
   .admin-row { grid-template-columns:1fr 1fr; background:#fff; border:1px solid rgba(18,18,18,.1); border-radius:14px; }
   .admin-list a { grid-template-columns:1fr 1fr; }
+  .seller-details-list div { grid-template-columns:1fr; gap:5px; }
 }

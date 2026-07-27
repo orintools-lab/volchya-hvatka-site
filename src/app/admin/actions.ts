@@ -14,6 +14,10 @@ import {
 import { createPaymentToken, decryptPaymentToken, publicPaymentUrl } from "@/server/services/payment-link";
 import { sendOrderPaymentLinkEmail } from "@/lib/notifications/email";
 import { sendDigitalDeliveryEmail } from "@/server/services/digital-delivery-service";
+import {
+  SELLER_SETTING_KEYS,
+  sellerDetailsSchema,
+} from "@/server/services/seller-details-policy";
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -414,6 +418,44 @@ export async function updateCheckoutSettings(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/admin/settings/payment");
   redirect("/admin/settings/payment?saved=1");
+}
+
+export async function updateSellerDetails(formData: FormData) {
+  const admin = await requireAdmin();
+  const parsed = sellerDetailsSchema.safeParse(Object.fromEntries(
+    SELLER_SETTING_KEYS.map((key) => [key, String(formData.get(key) ?? "")]),
+  ));
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Проверьте реквизиты продавца.");
+  }
+  const labels: Record<(typeof SELLER_SETTING_KEYS)[number], string> = {
+    sellerLegalName: "Полное наименование ИП",
+    sellerInn: "ИНН продавца",
+    sellerOgrnip: "ОГРНИП продавца",
+    sellerAddress: "Адрес продавца",
+    sellerEmail: "Email продавца",
+    sellerPhone: "Телефон продавца",
+  };
+  await db.$transaction([
+    ...SELLER_SETTING_KEYS.map((key) => db.siteSetting.upsert({
+      where: { key },
+      update: { value: parsed.data[key] },
+      create: { key, label: labels[key], value: parsed.data[key] },
+    })),
+    db.auditLog.create({
+      data: {
+        adminId: admin.id,
+        action: "SELLER_DETAILS_UPDATED",
+        entity: "SiteSetting",
+        entityId: "seller",
+        after: { keys: [...SELLER_SETTING_KEYS] },
+      },
+    }),
+  ]);
+  revalidatePath("/", "layout");
+  revalidatePath("/seller-details");
+  revalidatePath("/admin/settings/seller");
+  redirect("/admin/settings/seller?saved=1");
 }
 
 export async function saveLengthRule(formData: FormData) {
