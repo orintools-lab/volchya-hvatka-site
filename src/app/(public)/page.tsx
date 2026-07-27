@@ -3,6 +3,7 @@ import Link from "next/link";
 import { db } from "@/lib/db/client";
 import { Checkout } from "@/components/public/checkout";
 import { getCheckoutPaymentMode } from "@/server/services/checkout-payment-mode";
+import { env } from "@/lib/config/env";
 
 export const dynamic = "force-dynamic";
 
@@ -175,7 +176,11 @@ export default async function HomePage() {
                   <strong>{Number(product.price).toLocaleString("ru-RU")} ₽</strong>
                   {product.oldPrice && <s>{Number(product.oldPrice).toLocaleString("ru-RU")} ₽</s>}
                 </div>
-                <Checkout product={product} paymentMode={checkoutPaymentMode} />
+                <Checkout
+                  product={product}
+                  paymentMode={checkoutPaymentMode}
+                  vkMessagesUrl={env.NEXT_PUBLIC_VK_COMMUNITY_MESSAGES_URL || undefined}
+                />
               </article>
             ))}
           </div>

@@ -25,17 +25,14 @@ export async function provisionDigitalDelivery(input: {
   ]);
   if (!order || order.status !== "PAID" || order.payments.length === 0 || !course?.active) return null;
 
-  const existing = await db.digitalDelivery.findUnique({
-    where: { orderId_courseId: { orderId: order.id, courseId: course.id } },
-  });
-  if (existing) return existing;
-
   const token = createPaymentToken();
   const ready = course.deliveryMode === "DOWNLOAD_LINK" &&
     course.autoDeliveryEnabled &&
     Boolean(course.sourceUrl);
-  return db.digitalDelivery.create({
-    data: {
+  return db.digitalDelivery.upsert({
+    where: { orderId_courseId: { orderId: order.id, courseId: course.id } },
+    update: {},
+    create: {
       orderId: order.id,
       courseId: course.id,
       customerEmail: order.email.trim().toLowerCase(),

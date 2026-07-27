@@ -17,14 +17,17 @@ type CheckoutPaymentMode = "PAY_AFTER_DELIVERY_AGREEMENT" | "PAY_IMMEDIATELY";
 export function Checkout({
   product,
   paymentMode,
+  vkMessagesUrl,
 }: {
   product: Product;
   paymentMode: CheckoutPaymentMode;
+  vkMessagesUrl?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
   const [deliveryProvider, setDeliveryProvider] = useState<"CDEK" | "MANUAL">("MANUAL");
   const [height, setHeight] = useState("");
+  const [email, setEmail] = useState("");
   const [length, setLength] = useState<number>();
   const individualSizing = Number(height) > 0 && Number(height) < 100;
   const [cityQuery, setCityQuery] = useState("");
@@ -195,15 +198,18 @@ export function Checkout({
                   <div className="form-grid">
                     <label>ФИО<input name="customerName" required minLength={3} /></label>
                     <label>Телефон<input name="phone" type="tel" required /></label>
-                    <label>Email<input name="email" type="email" required /></label>
+                    <label>Email<input name="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
                     <label>Ваш рост, см<input name="customerHeight" type="number" min="1" max="250" required value={height} onChange={(event) => setHeight(event.target.value)} /></label>
                     <label>Материал<input value="Берёзовая фанера" readOnly /></label>
                     <label>Почтовый индекс<input name="postalCode" /></label>
                   </div>
                   <div className="quote">
                     <strong>Куда отправить доступ к курсу</strong>
-                    <p>✓ Email из формы заказа. Email является основным способом получения доступа.</p>
-                    <p>Получение материалов во ВКонтакте станет доступно только после подтверждённого разрешения сообщений сообщества.</p>
+                    <p>✓ Email: {email || "укажите email выше"}. Email является основным способом получения доступа.</p>
+                    {vkMessagesUrl ? <p>
+                      <a className="button-secondary" href={vkMessagesUrl} target="_blank" rel="noreferrer">Получать материалы во ВКонтакте</a><br />
+                      Переход в сообщения не считается подтверждением разрешения. VK-доставка включается только после подтверждённой привязки.
+                    </p> : <p>Получение материалов во ВКонтакте станет доступно после подключения подтверждённого разрешения сообщений сообщества.</p>}
                   </div>
                   {individualSizing ? (
                     <p>Для роста менее 100 см требуется индивидуальный подбор. Оформите заявку, и мы свяжемся с вами.</p>

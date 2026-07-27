@@ -17,6 +17,9 @@ async function main() {
     faqItems,
     reviews,
     homepageContent,
+    checkoutSettings,
+    deliveryCourses,
+    digitalDeliveries,
   ] = await Promise.all([
     prisma.adminUser.count({ where: { isActive: true } }),
     prisma.product.count({
@@ -33,6 +36,13 @@ async function main() {
         key: { in: ["hero.title", "hero.subtitle", "video.main"] },
       },
     }),
+    prisma.siteSetting.count({
+      where: { key: { in: ["checkoutPaymentMode", "paymentLinkExpiryHours"] } },
+    }),
+    prisma.course.count({
+      where: { slug: { in: ["start", "master"] }, deliveryMode: "DOWNLOAD_LINK" },
+    }),
+    prisma.digitalDelivery.count(),
   ]);
 
   const checks: Check[] = [
@@ -42,6 +52,9 @@ async function main() {
     { label: "Visible FAQ items", count: faqItems, minimum: 1 },
     { label: "Visible reviews", count: reviews, minimum: 1 },
     { label: "Homepage content blocks", count: homepageContent, minimum: 3 },
+    { label: "Checkout payment settings", count: checkoutSettings, minimum: 2 },
+    { label: "Download-link courses", count: deliveryCourses, minimum: 2 },
+    { label: "Digital delivery table available", count: digitalDeliveries + 1, minimum: 1 },
   ];
 
   let failed = false;

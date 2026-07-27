@@ -98,10 +98,25 @@ export async function agreeManualDelivery(formData: FormData) {
       },
     }),
   ]);
+  let paymentUrl: string | null = null;
   if (alreadyPaid && deliveryPrice > 0) {
-    await createDeliveryPayment(id);
+    paymentUrl = await createDeliveryPayment(id);
   } else if (!alreadyPaid) {
-    await createPaymentForAgreedOrder(id);
+    paymentUrl = await createPaymentForAgreedOrder(id);
+  }
+  if (paymentUrl) {
+    await db.auditLog.create({
+      data: {
+        adminId: admin.id,
+        action: "PAYMENT_LINK_CREATED",
+        entity: "Order",
+        entityId: id,
+        after: {
+          deliveryPrice,
+          paymentType: alreadyPaid ? "DELIVERY" : "ORDER",
+        },
+      },
+    });
   }
   revalidatePath("/admin/orders");
   redirect(`/admin/orders/${id}?payment=ready`);

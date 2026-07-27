@@ -41,6 +41,7 @@ const schema = z.object({
   SMTP_USER: optionalString,
   SMTP_PASSWORD: optionalString,
   ORDER_NOTIFICATION_EMAIL: optionalString,
+  NEXT_PUBLIC_VK_COMMUNITY_MESSAGES_URL: optionalString,
 });
 
 export const env = schema.parse(process.env);
