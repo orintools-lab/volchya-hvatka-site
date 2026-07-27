@@ -32,7 +32,14 @@ enum PaymentStatus {
   SUCCEEDED
   FAILED
   CANCELLED
+  EXPIRED
   REFUNDED
+}
+
+enum PaymentType {
+  ORDER
+  DELIVERY
+  UPSELL
 }
 
 enum UpsellOfferStatus {
@@ -83,11 +90,28 @@ enum VideoProvider {
   MP4
 }
 
+enum CourseDeliveryMode {
+  DOWNLOAD_LINK
+  CUSTOMER_CABINET
+}
+
+enum DigitalDeliveryStatus {
+  PENDING
+  READY
+  SENT
+  OPENED
+  REVOKED
+  EXPIRED
+}
+
 model Customer {
   id             String            @id @default(cuid())
   email          String            @unique
   name           String?
   phone          String?
+  vkUserId       String?           @unique
+  vkMessagesAllowedAt DateTime?
+  vkLinkSource   String?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   orders         Order[]
@@ -129,10 +153,16 @@ model Course {
   coverImage   String?
   regularPrice Decimal        @db.Decimal(12, 2)
   active       Boolean        @default(true)
+  deliveryMode CourseDeliveryMode @default(DOWNLOAD_LINK)
+  sourceUrl    String?
+  accessDurationDays Int?
+  autoDeliveryEnabled Boolean @default(true)
+  emailTemplate String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   lessons      CourseLesson[]
   accesses     CourseAccess[]
+  digitalDeliveries DigitalDelivery[]
 }
 
 model CourseLesson {
@@ -317,6 +347,7 @@ model Order {
   deliveryAgreementStatus DeliveryAgreementStatus @default(NOT_REQUIRED)
   agreedDeliveryPrice     Decimal?                @db.Decimal(12, 2)
   deliveryComment         String?
+  agreedDeliveryMethod    String?
   deliveryAgreedAt        DateTime?
   customerComment         String?
   adminNote               String?
@@ -331,6 +362,7 @@ model Order {
   upsellOffer             UpsellOffer?
   customer                Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
   courseAccesses          CourseAccess[]
+  digitalDeliveries       DigitalDelivery[]
 
   @@index([status, createdAt])
   @@index([email])
@@ -368,8 +400,13 @@ model Payment {
   invoiceId         Int            @unique
   idempotencyKey    String         @unique
   status            PaymentStatus  @default(PENDING)
+  type              PaymentType    @default(ORDER)
   amount            Decimal        @db.Decimal(12, 2)
   payload           Json?
+  paymentLinkTokenHash String?      @unique
+  paymentLinkTokenEncrypted String?
+  paymentLinkExpiresAt DateTime?
+  paidAt             DateTime?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   order             Order?         @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -378,6 +415,32 @@ model Payment {
 
   @@unique([provider, providerPaymentId])
   @@index([orderId, status])
+  @@index([status, paymentLinkExpiresAt])
+}
+
+model DigitalDelivery {
+  id                   String                @id @default(cuid())
+  orderId              String
+  courseId             String
+  customerEmail        String
+  tokenHash            String                @unique
+  tokenEncrypted       String
+  status               DigitalDeliveryStatus @default(PENDING)
+  expiresAt            DateTime?
+  firstOpenedAt        DateTime?
+  lastOpenedAt         DateTime?
+  openCount            Int                   @default(0)
+  emailSentAt          DateTime?
+  vkSentAt             DateTime?
+  lastEmailError       String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  order                Order                 @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  course               Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, courseId])
+  @@index([status, expiresAt])
+  @@index([customerEmail])
 }
 
 model UpsellOffer {

@@ -38,3 +38,15 @@ export async function grantMasterAccessForUpsell(offerId: string) {
     create: { customerId: customer.id, courseId: course.id, orderId: order.id },
   });
 }
+
+export async function grantMasterAccessForOrder(orderId: string) {
+  const { customer, order } = await customerForOrder(orderId);
+  if (!order.items.some((item) => item.productSlug === "master")) return null;
+  const course = await db.course.findUnique({ where: { slug: "master" } });
+  if (!course?.active) return null;
+  return db.courseAccess.upsert({
+    where: { customerId_courseId: { customerId: customer.id, courseId: course.id } },
+    update: { revokedAt: null, orderId: order.id },
+    create: { customerId: customer.id, courseId: course.id, orderId: order.id },
+  });
+}

@@ -58,3 +58,77 @@ export async function sendPaidOrderNotifications(order: PaidOrderNotification) {
   }
   return { sent: true };
 }
+
+export function isEmailConfigured() {
+  return Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD);
+}
+
+export async function sendOrderPaymentLinkEmail(input: {
+  email: string;
+  customerName: string;
+  orderNumber: string;
+  subtotal: string;
+  deliveryPrice: string;
+  total: string;
+  paymentUrl: string;
+}) {
+  const mail = transport();
+  if (!mail) return { sent: false, reason: "SMTP_NOT_CONFIGURED" as const };
+  await mail.sendMail({
+    from: env.SMTP_USER,
+    to: input.email,
+    subject: `Ссылка на оплату заказа №${input.orderNumber}`,
+    text: `Здравствуйте, ${input.customerName}!
+
+Мы согласовали условия доставки вашего заказа №${input.orderNumber}.
+
+Товары: ${input.subtotal} ₽
+Доставка: ${input.deliveryPrice} ₽
+Итого: ${input.total} ₽
+
+Для оплаты перейдите по ссылке:
+
+${input.paymentUrl}
+
+После успешной оплаты мы начнём подготовку заказа к отправке.
+
+«Волчья Хватка»`,
+  });
+  return { sent: true as const };
+}
+
+export async function sendCourseDeliveryEmail(input: {
+  email: string;
+  customerName: string;
+  orderNumber: string;
+  courseTitle: string;
+  accessUrl: string;
+  expiresLabel: string;
+}) {
+  const mail = transport();
+  if (!mail) return { sent: false, reason: "SMTP_NOT_CONFIGURED" as const };
+  await mail.sendMail({
+    from: env.SMTP_USER,
+    to: input.email,
+    subject: "Ваш курс готов — Волчья Хватка",
+    text: `Здравствуйте, ${input.customerName}!
+
+Спасибо за покупку.
+
+Доступ к курсу «${input.courseTitle}» активирован.
+
+Открыть курс:
+${input.accessUrl}
+
+Номер заказа: ${input.orderNumber}
+Курс: ${input.courseTitle}
+Срок действия ссылки: ${input.expiresLabel}
+
+Сохраните это письмо. Ссылка предназначена для покупателя заказа №${input.orderNumber}.
+
+Если возникнут вопросы, ответьте на это письмо или напишите нам в сообщениях сообщества ВКонтакте.
+
+«Волчья Хватка»`,
+  });
+  return { sent: true as const };
+}

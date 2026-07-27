@@ -173,6 +173,11 @@ async function main() {
       label: "Порядок оплаты заказа",
       value: "PAY_AFTER_DELIVERY_AGREEMENT",
     },
+    {
+      key: "paymentLinkExpiryHours",
+      label: "Срок действия ссылки на оплату",
+      value: 72,
+    },
     { key: "contacts", label: "Контакты", value: { phone: "", email: "", vk: "" } },
     {
       key: "legal.requisites",
@@ -254,22 +259,28 @@ async function main() {
 
   const startCourse = await prisma.course.upsert({
     where: { slug: "start" },
-    update: {},
+    update: { deliveryMode: "DOWNLOAD_LINK", accessDurationDays: 365, autoDeliveryEnabled: true },
     create: {
       slug: "start",
       title: "Курс «Старт»",
       description: "Базовые элементы фланкировки для последовательного начала занятий.",
       regularPrice: 3390,
+      deliveryMode: "DOWNLOAD_LINK",
+      accessDurationDays: 365,
+      autoDeliveryEnabled: true,
     },
   });
   const masterCourse = await prisma.course.upsert({
     where: { slug: "master" },
-    update: {},
+    update: { deliveryMode: "DOWNLOAD_LINK", accessDurationDays: 365, autoDeliveryEnabled: true },
     create: {
       slug: "master",
       title: "Курс «Мастер»",
       description: "Полная программа с базовыми и продвинутыми элементами.",
       regularPrice: 3390,
+      deliveryMode: "DOWNLOAD_LINK",
+      accessDurationDays: 365,
+      autoDeliveryEnabled: true,
     },
   });
   for (const course of [startCourse, masterCourse]) {

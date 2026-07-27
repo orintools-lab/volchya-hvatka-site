@@ -13,3 +13,12 @@ export async function getCheckoutPaymentMode(): Promise<CheckoutPaymentMode> {
   });
   return parseCheckoutPaymentMode(setting?.value);
 }
+
+export async function getPaymentLinkExpiryHours() {
+  const setting = await db.siteSetting.findUnique({
+    where: { key: "paymentLinkExpiryHours" },
+    select: { value: true },
+  });
+  const value = Number(setting?.value);
+  return Number.isInteger(value) && value >= 1 && value <= 168 ? value : 72;
+}

@@ -64,12 +64,15 @@ export async function createUpsellPayment(offerId: string, now = new Date()) {
   });
   await db.$transaction([
     db.payment.create({
-      data: upsellPaymentData({
-        offerId: offer.id,
-        invoiceId,
-        amount: offer.specialPrice.toFixed(2),
-        paymentUrl,
-      }),
+      data: {
+        ...upsellPaymentData({
+          offerId: offer.id,
+          invoiceId,
+          amount: offer.specialPrice.toFixed(2),
+          paymentUrl,
+        }),
+        type: "UPSELL",
+      },
     }),
     db.upsellOffer.update({
       where: { id: offer.id },

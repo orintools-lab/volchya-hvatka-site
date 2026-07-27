@@ -11,6 +11,9 @@ import {
   isCheckoutPaymentMode,
   type CheckoutPaymentMode,
 } from "@/server/services/checkout-payment-mode";
+import { createPaymentToken, decryptPaymentToken, publicPaymentUrl } from "@/server/services/payment-link";
+import { sendOrderPaymentLinkEmail } from "@/lib/notifications/email";
+import { sendDigitalDeliveryEmail } from "@/server/services/digital-delivery-service";
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -56,8 +59,10 @@ export async function agreeManualDelivery(formData: FormData) {
   const deliveryPrice = Number(formData.get("deliveryPrice"));
   const actualLengthCm = Number(formData.get("actualLengthCm"));
   const deliveryComment = String(formData.get("deliveryComment") ?? "").trim();
+  const deliveryMethod = String(formData.get("deliveryMethod") ?? "").trim();
   if (!Number.isFinite(deliveryPrice) || deliveryPrice < 0) throw new Error("Укажите корректную стоимость доставки.");
   if (!Number.isInteger(actualLengthCm) || actualLengthCm <= 0) throw new Error("Укажите фактическую длину шашек.");
+  if (!deliveryMethod) throw new Error("Укажите способ доставки.");
   const order = await db.order.findUniqueOrThrow({ where: { id }, include: { payments: true } });
   const alreadyPaid = order.status === "PAID";
   const checkoutPaymentExists = order.payments.some((payment) =>
@@ -74,6 +79,7 @@ export async function agreeManualDelivery(formData: FormData) {
         deliveryPrice,
         agreedDeliveryPrice: deliveryPrice,
         deliveryComment,
+        agreedDeliveryMethod: deliveryMethod,
         actualLengthCm,
         deliveryAgreementStatus: "AGREED",
         deliveryAgreedAt: new Date(),
@@ -94,9 +100,11 @@ export async function agreeManualDelivery(formData: FormData) {
   ]);
   if (alreadyPaid && deliveryPrice > 0) {
     await createDeliveryPayment(id);
+  } else if (!alreadyPaid) {
+    await createPaymentForAgreedOrder(id);
   }
-  revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/orders");
+  redirect(`/admin/orders/${id}?payment=ready`);
 }
 
 export async function createManualPayment(formData: FormData) {
@@ -108,6 +116,111 @@ export async function createManualPayment(formData: FormData) {
   });
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/orders");
+}
+
+export async function recordPaymentLinkCopied(orderId: string, paymentId: string) {
+  const admin = await requireAdmin();
+  const payment = await db.payment.findFirst({ where: { id: paymentId, orderId } });
+  if (!payment) throw new Error("Платёж не найден.");
+  await db.auditLog.create({
+    data: {
+      adminId: admin.id,
+      action: "PAYMENT_LINK_COPIED",
+      entity: "Order",
+      entityId: orderId,
+      after: { paymentId },
+    },
+  });
+}
+
+export async function sendPaymentLinkByEmail(formData: FormData) {
+  const admin = await requireAdmin();
+  const orderId = String(formData.get("orderId"));
+  const paymentId = String(formData.get("paymentId"));
+  const payment = await db.payment.findFirst({
+    where: { id: paymentId, orderId, status: "PENDING" },
+    include: { order: true },
+  });
+  if (!payment?.order || !payment.paymentLinkTokenEncrypted) throw new Error("Активная ссылка не найдена.");
+  const paymentUrl = publicPaymentUrl(decryptPaymentToken(payment.paymentLinkTokenEncrypted));
+  const result = await sendOrderPaymentLinkEmail({
+    email: payment.order.email,
+    customerName: payment.order.customerName,
+    orderNumber: payment.order.number,
+    subtotal: payment.order.subtotal.toFixed(2),
+    deliveryPrice: payment.order.deliveryPrice?.toFixed(2) ?? "0.00",
+    total: payment.order.total?.toFixed(2) ?? payment.amount.toFixed(2),
+    paymentUrl,
+  });
+  if (!result.sent) throw new Error("Отправка email пока не настроена");
+  await db.auditLog.create({
+    data: {
+      adminId: admin.id,
+      action: "PAYMENT_LINK_EMAIL_SENT",
+      entity: "Order",
+      entityId: orderId,
+      after: { paymentId },
+    },
+  });
+  redirect(`/admin/orders/${orderId}?email=sent`);
+}
+
+export async function resendDigitalDeliveryEmail(formData: FormData) {
+  const admin = await requireAdmin();
+  const deliveryId = String(formData.get("deliveryId"));
+  const delivery = await db.digitalDelivery.findUnique({ where: { id: deliveryId } });
+  if (!delivery) throw new Error("Выдача не найдена.");
+  await db.digitalDelivery.update({
+    where: { id: deliveryId },
+    data: { emailSentAt: null, lastEmailError: null, status: delivery.status === "PENDING" ? "PENDING" : "READY" },
+  });
+  const result = await sendDigitalDeliveryEmail(deliveryId);
+  await db.auditLog.create({
+    data: {
+      adminId: admin.id,
+      action: result.sent ? "COURSE_EMAIL_RESENT" : "COURSE_EMAIL_FAILED",
+      entity: "DigitalDelivery",
+      entityId: deliveryId,
+    },
+  });
+  revalidatePath("/admin/learning/deliveries");
+}
+
+export async function updateDigitalDelivery(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("deliveryId"));
+  const operation = String(formData.get("operation"));
+  const delivery = await db.digitalDelivery.findUniqueOrThrow({ where: { id }, include: { course: true } });
+  if (operation === "revoke") {
+    await db.digitalDelivery.update({ where: { id }, data: { status: "REVOKED" } });
+  } else if (operation === "renew") {
+    const token = createPaymentToken();
+    const days = delivery.course.accessDurationDays;
+    await db.digitalDelivery.update({
+      where: { id },
+      data: {
+        tokenHash: token.hash,
+        tokenEncrypted: token.encrypted,
+        status: delivery.course.sourceUrl ? "READY" : "PENDING",
+        expiresAt: days === null ? null : new Date(Date.now() + days * 86400000),
+        emailSentAt: null,
+        lastEmailError: null,
+      },
+    });
+  } else if (operation === "extend") {
+    const days = Number(formData.get("days"));
+    if (![30, 90, 180, 365].includes(days)) throw new Error("Недопустимый срок доступа.");
+    await db.digitalDelivery.update({
+      where: { id },
+      data: { expiresAt: new Date(Date.now() + days * 86400000), status: "READY" },
+    });
+  } else {
+    throw new Error("Неизвестное действие.");
+  }
+  await db.auditLog.create({
+    data: { adminId: admin.id, action: `DIGITAL_DELIVERY_${operation.toUpperCase()}`, entity: "DigitalDelivery", entityId: id },
+  });
+  revalidatePath("/admin/learning/deliveries");
 }
 
 export async function updateProduct(formData: FormData) {
@@ -248,6 +361,10 @@ export async function updateCheckoutSettings(formData: FormData) {
     throw new Error("Выберите допустимый порядок оплаты заказа.");
   }
   const mode: CheckoutPaymentMode = value;
+  const expiryHours = Number(formData.get("paymentLinkExpiryHours"));
+  if (!Number.isInteger(expiryHours) || expiryHours < 1 || expiryHours > 168) {
+    throw new Error("Срок действия ссылки должен быть от 1 до 168 часов.");
+  }
   const before = await db.siteSetting.findUnique({ where: { key: "checkoutPaymentMode" } });
   await db.$transaction([
     db.siteSetting.upsert({
@@ -269,10 +386,19 @@ export async function updateCheckoutSettings(formData: FormData) {
         after: { value: mode },
       },
     }),
+    db.siteSetting.upsert({
+      where: { key: "paymentLinkExpiryHours" },
+      update: { value: expiryHours },
+      create: {
+        key: "paymentLinkExpiryHours",
+        label: "Срок действия ссылки на оплату",
+        value: expiryHours,
+      },
+    }),
   ]);
   revalidatePath("/");
-  revalidatePath("/admin/settings/checkout");
-  redirect("/admin/settings/checkout?saved=1");
+  revalidatePath("/admin/settings/payment");
+  redirect("/admin/settings/payment?saved=1");
 }
 
 export async function saveLengthRule(formData: FormData) {
@@ -358,6 +484,13 @@ export async function saveCourse(formData: FormData) {
     coverImage: String(formData.get("coverImage") ?? "").trim() || null,
     regularPrice: Number(formData.get("regularPrice")),
     active: formData.get("active") === "on",
+    deliveryMode: String(formData.get("deliveryMode") ?? "DOWNLOAD_LINK") as "DOWNLOAD_LINK" | "CUSTOMER_CABINET",
+    sourceUrl: String(formData.get("sourceUrl") ?? "").trim() || null,
+    accessDurationDays: String(formData.get("accessDurationDays") ?? "").trim()
+      ? Number(formData.get("accessDurationDays"))
+      : null,
+    autoDeliveryEnabled: formData.get("autoDeliveryEnabled") === "on",
+    emailTemplate: String(formData.get("emailTemplate") ?? "").trim() || null,
   };
   if (!data.slug || !data.title || !data.description || data.regularPrice <= 0) throw new Error("Проверьте курс.");
   if (id) await db.course.update({ where: { id }, data }); else await db.course.create({ data });

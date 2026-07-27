@@ -6,6 +6,7 @@ import { UpsellCountdown } from "@/components/public/upsell-countdown";
 import { isOfferActive } from "@/server/services/upsell-policy";
 import { registerUpsellView } from "@/server/services/upsell-service";
 import { acceptUpsell } from "./actions";
+import { getDigitalDeliveryPublicUrl } from "@/server/services/digital-delivery-service";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -38,8 +39,8 @@ export default async function ThankYouPage({ searchParams }: { searchParams: Pro
   const payment = await db.payment.findUnique({
     where: { invoiceId },
     include: {
-      order: { include: { items: true, upsellOffer: true } },
-      upsellOffer: { include: { order: { include: { items: true } } } },
+      order: { include: { items: true, upsellOffer: true, digitalDeliveries: { include: { course: true } } } },
+      upsellOffer: { include: { order: { include: { items: true, digitalDeliveries: { include: { course: true } } } } } },
     },
   });
   if (!payment || payment.status !== "SUCCEEDED") notFound();
@@ -53,6 +54,9 @@ export default async function ThankYouPage({ searchParams }: { searchParams: Pro
   const delivery = order.deliveryProvider === "CDEK"
     ? `${order.cdekTariffName ?? "СДЭК"}: ${order.cdekPointAddress ?? order.deliveryAddress ?? ""}`
     : "Доставка по согласованию";
+  const courseDeliveries = order.digitalDeliveries.filter((item) =>
+    ["READY", "SENT", "OPENED"].includes(item.status)
+  );
 
   return <main className="section-light" style={{minHeight:"100vh"}}>
     <p className="eyebrow">Заказ оплачен</p>
@@ -65,6 +69,12 @@ export default async function ThankYouPage({ searchParams }: { searchParams: Pro
       <p>✓ Способ доставки: <strong>{delivery}</strong></p>
       <p>✓ Статус оплаты: <strong>SUCCEEDED</strong></p>
     </section>
+    {courseDeliveries.length > 0 && <section className="admin-panel" style={{marginTop:"2rem"}}>
+      <h2>Ваш курс готов</h2>
+      {await Promise.all(courseDeliveries.map(async (item) =>
+        <p key={item.id}><Link className="button" href={await getDigitalDeliveryPublicUrl(item)}>Открыть курс «{item.course.title}»</Link></p>
+      ))}
+    </section>}
     {settings && offer && !accepted && <section className="admin-panel" style={{marginTop:"2rem"}}>
       {active ? <>
         <h2>{settings.title}</h2>

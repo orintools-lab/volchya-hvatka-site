@@ -6,9 +6,25 @@ import { revalidateDeliveryQuote } from "./delivery-service";
 import { findLengthRecommendation } from "./length-service";
 import { manualOrderState, SHASHKA_MATERIAL } from "./manual-order";
 import { createUpsellAfterPayment } from "./upsell-service";
-import { grantMasterAccessForUpsell, grantStartAccess } from "./course-access-service";
+import {
+  grantMasterAccessForOrder,
+  grantMasterAccessForUpsell,
+  grantStartAccess,
+} from "./course-access-service";
 import { requestMagicLink } from "./customer-auth-service";
-import { checkoutPaymentPolicy, getCheckoutPaymentMode } from "./checkout-payment-mode";
+import {
+  checkoutPaymentPolicy,
+  getCheckoutPaymentMode,
+  getPaymentLinkExpiryHours,
+} from "./checkout-payment-mode";
+import {
+  createPaymentToken,
+  decryptPaymentToken,
+  isPaymentLinkExpired,
+  paymentLinkExpiry,
+  publicPaymentUrl,
+} from "./payment-link";
+import { deliverCourseAfterPayment } from "./digital-delivery-service";
 
 const MATERIAL = SHASHKA_MATERIAL;
 
@@ -109,6 +125,8 @@ export async function createOrder(input: CreateOrderInput) {
     }
 
     const invoiceId = await uniqueInvoiceId();
+    const linkToken = createPaymentToken();
+    const linkExpiresAt = paymentLinkExpiry(await getPaymentLinkExpiryHours());
     const immediate = await db.$transaction(async (transaction) => {
       const order = await transaction.order.create({
         data: {
@@ -162,6 +180,10 @@ export async function createOrder(input: CreateOrderInput) {
           status: "PENDING",
           amount: subtotal,
           providerPaymentId: paymentUrl,
+          type: "ORDER",
+          paymentLinkTokenHash: linkToken.hash,
+          paymentLinkTokenEncrypted: linkToken.encrypted,
+          paymentLinkExpiresAt: linkExpiresAt,
         },
       });
       return { order, paymentUrl };
@@ -182,6 +204,8 @@ export async function createOrder(input: CreateOrderInput) {
   const cdekSubtotal = product.price.mul(quote.quantity);
   const total = cdekSubtotal.add(quote.price);
   const invoiceId = await uniqueInvoiceId();
+  const linkToken = createPaymentToken();
+  const linkExpiresAt = paymentLinkExpiry(await getPaymentLinkExpiryHours());
 
   const result = await db.$transaction(async (transaction) => {
     const order = await transaction.order.create({
@@ -233,6 +257,12 @@ export async function createOrder(input: CreateOrderInput) {
         },
       },
     });
+    const paymentUrl = new RobokassaPaymentProvider().createPaymentUrl({
+      invoiceId,
+      amount: total.toFixed(2),
+      description: `Оплата заказа ${order.number}`,
+      email: order.email,
+    });
     const payment = await transaction.payment.create({
       data: {
         orderId: order.id,
@@ -241,54 +271,61 @@ export async function createOrder(input: CreateOrderInput) {
         idempotencyKey: `robokassa:${invoiceId}`,
         status: "PENDING",
         amount: total,
+        type: "ORDER",
+        paymentLinkTokenHash: linkToken.hash,
+        paymentLinkTokenEncrypted: linkToken.encrypted,
+        paymentLinkExpiresAt: linkExpiresAt,
+        providerPaymentId: paymentUrl,
       },
     });
-    return { order, payment };
+    return { order, payment, paymentUrl };
   });
   return {
     orderId: result.order.id,
     orderNumber: result.order.number,
     requiresPayment: true,
-    paymentUrl: new RobokassaPaymentProvider().createPaymentUrl({
-      invoiceId,
-      amount: total.toFixed(2),
-      description: `Оплата заказа ${result.order.number}`,
-      email: result.order.email,
-    }),
+    paymentUrl: result.paymentUrl,
     total: total.toFixed(2),
   };
 }
 
 export async function createPaymentForAgreedOrder(orderId: string) {
   const order = await db.order.findUnique({ where: { id: orderId }, include: { payments: true } });
+  if (order?.status === "PAID") throw new Error("Заказ уже оплачен");
   if (!order || !order.total || order.deliveryAgreementStatus !== "AGREED") {
     throw new Error("Сначала согласуйте стоимость доставки.");
   }
-  const existing = order.payments.find((payment) => payment.status === "PENDING");
-  if (existing?.providerPaymentId) return existing.providerPaymentId;
-  const invoiceId = existing?.invoiceId ?? await uniqueInvoiceId();
+  const existing = order.payments.find((payment) => payment.status === "PENDING" && payment.type === "ORDER");
+  if (existing && isPaymentLinkExpired(existing.paymentLinkExpiresAt)) {
+    await db.payment.update({ where: { id: existing.id }, data: { status: "EXPIRED" } });
+  } else if (existing?.providerPaymentId && existing.paymentLinkTokenEncrypted) {
+    return publicPaymentUrl(decryptPaymentToken(existing.paymentLinkTokenEncrypted));
+  }
+  const invoiceId = await uniqueInvoiceId();
+  const linkToken = createPaymentToken();
+  const linkExpiresAt = paymentLinkExpiry(await getPaymentLinkExpiryHours());
   const paymentUrl = new RobokassaPaymentProvider().createPaymentUrl({
     invoiceId,
     amount: order.total.toFixed(2),
     description: `Оплата заказа ${order.number}`,
     email: order.email,
   });
-  if (existing) {
-    await db.payment.update({ where: { id: existing.id }, data: { providerPaymentId: paymentUrl } });
-  } else {
-    await db.payment.create({
-      data: {
-        orderId,
-        provider: "robokassa",
-        invoiceId,
-        idempotencyKey: `robokassa:${invoiceId}`,
-        status: "PENDING",
-        amount: order.total,
-        providerPaymentId: paymentUrl,
-      },
-    });
-  }
-  return paymentUrl;
+  await db.payment.create({
+    data: {
+      orderId,
+      provider: "robokassa",
+      invoiceId,
+      idempotencyKey: `robokassa:${invoiceId}`,
+      status: "PENDING",
+      type: "ORDER",
+      amount: order.total,
+      providerPaymentId: paymentUrl,
+      paymentLinkTokenHash: linkToken.hash,
+      paymentLinkTokenEncrypted: linkToken.encrypted,
+      paymentLinkExpiresAt: linkExpiresAt,
+    },
+  });
+  return publicPaymentUrl(linkToken.token);
 }
 
 export async function createDeliveryPayment(orderId: string) {
@@ -296,38 +333,38 @@ export async function createDeliveryPayment(orderId: string) {
   if (!order || !order.deliveryPrice || order.deliveryPrice.lte(0) || order.deliveryAgreementStatus !== "AGREED") {
     throw new Error("Сначала согласуйте ненулевую стоимость доставки.");
   }
-  const existing = order.payments.find((payment) =>
-    payment.status === "PENDING" &&
-    typeof payment.payload === "object" &&
-    payment.payload !== null &&
-    !Array.isArray(payment.payload) &&
-    (payment.payload as { purpose?: unknown }).purpose === "DELIVERY"
-  );
-  if (existing?.providerPaymentId) return existing.providerPaymentId;
-  const invoiceId = existing?.invoiceId ?? await uniqueInvoiceId();
+  const existing = order.payments.find((payment) => payment.status === "PENDING" && payment.type === "DELIVERY");
+  if (existing && isPaymentLinkExpired(existing.paymentLinkExpiresAt)) {
+    await db.payment.update({ where: { id: existing.id }, data: { status: "EXPIRED" } });
+  } else if (existing?.providerPaymentId && existing.paymentLinkTokenEncrypted) {
+    return publicPaymentUrl(decryptPaymentToken(existing.paymentLinkTokenEncrypted));
+  }
+  const invoiceId = await uniqueInvoiceId();
+  const linkToken = createPaymentToken();
+  const linkExpiresAt = paymentLinkExpiry(await getPaymentLinkExpiryHours());
   const paymentUrl = new RobokassaPaymentProvider().createPaymentUrl({
     invoiceId,
     amount: order.deliveryPrice.toFixed(2),
     description: `Оплата доставки заказа ${order.number}`,
     email: order.email,
   });
-  if (existing) {
-    await db.payment.update({ where: { id: existing.id }, data: { providerPaymentId: paymentUrl } });
-  } else {
-    await db.payment.create({
-      data: {
-        orderId,
-        provider: "robokassa",
-        invoiceId,
-        idempotencyKey: `robokassa:delivery:${order.id}:${invoiceId}`,
-        status: "PENDING",
-        amount: order.deliveryPrice,
-        providerPaymentId: paymentUrl,
-        payload: { purpose: "DELIVERY" },
-      },
-    });
-  }
-  return paymentUrl;
+  await db.payment.create({
+    data: {
+      orderId,
+      provider: "robokassa",
+      invoiceId,
+      idempotencyKey: `robokassa:delivery:${order.id}:${invoiceId}`,
+      status: "PENDING",
+      type: "DELIVERY",
+      amount: order.deliveryPrice,
+      providerPaymentId: paymentUrl,
+      payload: { purpose: "DELIVERY" },
+      paymentLinkTokenHash: linkToken.hash,
+      paymentLinkTokenEncrypted: linkToken.encrypted,
+      paymentLinkExpiresAt: linkExpiresAt,
+    },
+  });
+  return publicPaymentUrl(linkToken.token);
 }
 
 export async function processRobokassaResult(input: {
@@ -351,8 +388,21 @@ export async function processRobokassaResult(input: {
     (payment.payload as { purpose?: unknown }).purpose === "DELIVERY";
   if (payment.status === "SUCCEEDED") {
     try {
-      if (payment.upsellOfferId) await grantMasterAccessForUpsell(payment.upsellOfferId);
-      else if (payment.orderId && !isDeliveryPayment) await grantStartAccess(payment.orderId);
+      if (payment.upsellOfferId) {
+        await grantMasterAccessForUpsell(payment.upsellOfferId);
+        const offer = await db.upsellOffer.findUnique({ where: { id: payment.upsellOfferId } });
+        if (offer) await deliverCourseAfterPayment({ orderId: offer.orderId, courseSlug: "master" });
+      } else if (payment.orderId && !isDeliveryPayment) {
+        await grantStartAccess(payment.orderId);
+        await grantMasterAccessForOrder(payment.orderId);
+        const order = await db.order.findUnique({ where: { id: payment.orderId }, include: { items: true } });
+        if (order?.items.some((item) => item.productSlug === "start")) {
+          await deliverCourseAfterPayment({ orderId: payment.orderId, courseSlug: "start" });
+        }
+        if (order?.items.some((item) => item.productSlug === "master")) {
+          await deliverCourseAfterPayment({ orderId: payment.orderId, courseSlug: "master" });
+        }
+      }
     } catch {}
     return `OK${input.invoiceId}`;
   }
@@ -362,6 +412,7 @@ export async function processRobokassaResult(input: {
       where: { id: payment.id, status: { not: "SUCCEEDED" } },
       data: {
         status: "SUCCEEDED",
+        paidAt: new Date(),
         payload: isDeliveryPayment ? { ...input.payload, purpose: "DELIVERY" } : input.payload,
       },
     });
@@ -391,6 +442,8 @@ export async function processRobokassaResult(input: {
   if (payment.upsellOfferId) {
     try {
       await grantMasterAccessForUpsell(payment.upsellOfferId);
+      const offer = await db.upsellOffer.findUnique({ where: { id: payment.upsellOfferId } });
+      if (offer) await deliverCourseAfterPayment({ orderId: offer.orderId, courseSlug: "master" });
     } catch {}
     return `OK${input.invoiceId}`;
   }
@@ -416,6 +469,13 @@ export async function processRobokassaResult(input: {
   }
   try {
     await grantStartAccess(paidOrder.id);
+    await grantMasterAccessForOrder(paidOrder.id);
+    if (paidOrder.items.some((item) => item.productSlug === "start")) {
+      await deliverCourseAfterPayment({ orderId: paidOrder.id, courseSlug: "start" });
+    }
+    if (paidOrder.items.some((item) => item.productSlug === "master")) {
+      await deliverCourseAfterPayment({ orderId: paidOrder.id, courseSlug: "master" });
+    }
     await requestMagicLink(paidOrder.email);
   } catch (error) {
     await db.auditLog.create({
