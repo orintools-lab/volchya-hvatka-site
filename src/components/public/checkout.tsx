@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 type Product = { id: string; name: string; price: string };
@@ -48,6 +48,9 @@ export function Checkout({
   }>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submitStage, setSubmitStage] = useState<"idle" | "creating" | "redirecting">("idle");
+  const checkoutIdempotencyKey = useRef("");
+  const submitting = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -137,44 +140,66 @@ export function Checkout({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current) return;
     if (!length && !individualSizing) return setError("Для указанного роста длина пока не настроена.");
     if (deliveryProvider === "CDEK" && !quote) return setError("Рассчитайте и подтвердите доставку.");
-    setLoading(true); setError("");
-    const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/orders", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        productId: product.id,
-        deliveryProvider,
-        quoteId: quote?.id,
-        customerName: form.get("customerName"),
-        phone: form.get("phone"),
-        email: form.get("email"),
-        postalCode: form.get("postalCode") || undefined,
-        customerHeight: Number(form.get("customerHeight")),
-        comment: form.get("comment") || undefined,
-        privacyAccepted: form.get("privacyAccepted") === "on",
-        offerAccepted: form.get("offerAccepted") === "on",
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok) setError(data.error);
-    else if (data.requiresPayment && data.paymentUrl) window.location.assign(data.paymentUrl);
-    else setSuccess({
-      orderNumber: data.orderNumber,
-      productName: data.productName,
-      customerHeight: data.customerHeight,
-      recommendedLengthCm: data.recommendedLengthCm,
-      material: data.material,
-      message: data.message,
-    });
-    setLoading(false);
+    submitting.current = true;
+    setSubmitStage("creating");
+    setError("");
+    if (!checkoutIdempotencyKey.current) checkoutIdempotencyKey.current = crypto.randomUUID();
+    try {
+      const form = new FormData(event.currentTarget);
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          checkoutIdempotencyKey: checkoutIdempotencyKey.current,
+          productId: product.id,
+          deliveryProvider,
+          quoteId: quote?.id,
+          customerName: form.get("customerName"),
+          phone: form.get("phone"),
+          email: form.get("email"),
+          postalCode: form.get("postalCode") || undefined,
+          customerHeight: Number(form.get("customerHeight")),
+          comment: form.get("comment") || undefined,
+          privacyAccepted: form.get("privacyAccepted") === "on",
+          offerAccepted: form.get("offerAccepted") === "on",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Не удалось оформить заказ. Попробуйте ещё раз. Если ошибка повторится, напишите нам в сообщения сообщества.");
+        setSubmitStage("idle");
+        submitting.current = false;
+      } else if (data.requiresPayment && data.paymentUrl) {
+        setSubmitStage("redirecting");
+        window.location.assign(data.paymentUrl);
+      } else {
+        setSuccess({
+          orderNumber: data.orderNumber,
+          productName: data.productName,
+          customerHeight: data.customerHeight,
+          recommendedLengthCm: data.recommendedLengthCm,
+          material: data.material,
+          message: data.message,
+        });
+        setSubmitStage("idle");
+        submitting.current = false;
+      }
+    } catch {
+      setError("Не удалось оформить заказ. Попробуйте ещё раз. Если ошибка повторится, напишите нам в сообщения сообщества.");
+      setSubmitStage("idle");
+      submitting.current = false;
+    }
   }
 
   return (
     <>
-      <button className="button full" type="button" onClick={() => setOpen(true)}>Купить комплект</button>
+      <button className="button full" type="button" onClick={() => {
+        checkoutIdempotencyKey.current = crypto.randomUUID();
+        setOpen(true);
+      }}>Купить комплект</button>
       {open && (
         <div className="modal-backdrop" role="presentation">
           <div className="order-modal" role="dialog" aria-modal="true" aria-labelledby={`order-${product.id}`}>
@@ -259,9 +284,13 @@ export function Checkout({
                   <label className="check"><input name="privacyAccepted" type="checkbox" required /> Согласен с <Link href="/privacy">политикой конфиденциальности</Link></label>
                   <label className="check"><input name="offerAccepted" type="checkbox" required /> Принимаю <Link href="/offer">публичную оферту</Link></label>
                   {error && <p className="form-error" role="alert">{error}</p>}
-                  <button className="button full" disabled={loading || !height || (!length && !individualSizing) || (deliveryProvider === "CDEK" && !quote)}>
-                    {loading
-                      ? "Проверяем…"
+                  <button className="button full" disabled={loading || submitStage !== "idle" || !height || (!length && !individualSizing) || (deliveryProvider === "CDEK" && !quote)}>
+                    {submitStage === "creating"
+                      ? "Создаём заказ…"
+                      : submitStage === "redirecting"
+                        ? "Переходим к оплате…"
+                        : loading
+                          ? "Проверяем…"
                       : deliveryProvider === "MANUAL" && paymentMode === "PAY_AFTER_DELIVERY_AGREEMENT"
                         ? "Оформить заявку"
                         : "Перейти к оплате"}

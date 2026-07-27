@@ -63,6 +63,16 @@ export function isEmailConfigured() {
   return Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD);
 }
 
+export async function verifySmtpConnection() {
+  const mail = transport();
+  if (!mail) return false;
+  try {
+    return await mail.verify();
+  } catch {
+    return false;
+  }
+}
+
 export async function sendOrderPaymentLinkEmail(input: {
   email: string;
   customerName: string;

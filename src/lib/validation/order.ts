@@ -11,6 +11,7 @@ export const quoteSchema = z.object({
 });
 
 export const orderSchema = z.object({
+  checkoutIdempotencyKey: z.string().uuid(),
   productId: z.string().min(1),
   deliveryProvider: z.enum(["CDEK", "OZON", "MANUAL"]),
   quoteId: z.string().min(1).optional(),

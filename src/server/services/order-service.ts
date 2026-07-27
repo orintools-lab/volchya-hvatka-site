@@ -42,6 +42,7 @@ async function uniqueInvoiceId() {
 }
 
 type CreateOrderInput = {
+  checkoutIdempotencyKey: string;
   productId: string;
   deliveryProvider: "CDEK" | "OZON" | "MANUAL";
   quoteId?: string;
@@ -54,7 +55,46 @@ type CreateOrderInput = {
   utm?: Record<string, string>;
 };
 
-export async function createOrder(input: CreateOrderInput) {
+async function existingCheckoutResponse(checkoutIdempotencyKey: string) {
+  const existing = await db.order.findUnique({
+    where: { checkoutIdempotencyKey },
+    include: {
+      items: { take: 1 },
+      payments: {
+        where: { status: "PENDING", type: "ORDER" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+  if (!existing) return null;
+  const payment = existing.payments[0];
+  if (payment?.providerPaymentId) {
+    return {
+      orderId: existing.id,
+      orderNumber: existing.number,
+      requiresPayment: true,
+      paymentUrl: payment.providerPaymentId,
+      total: existing.total?.toFixed(2) ?? payment.amount.toFixed(2),
+    };
+  }
+  const item = existing.items[0];
+  return {
+    orderId: existing.id,
+    orderNumber: existing.number,
+    requiresPayment: false,
+    total: existing.total?.toFixed(2) ?? null,
+    productName: item?.productName ?? "",
+    customerHeight: existing.customerHeight,
+    recommendedLengthCm: existing.recommendedLengthCm,
+    material: existing.material,
+    message: "Заявка принята. Мы свяжемся с вами для согласования доставки и отправим ссылку на оплату.",
+  };
+}
+
+async function createOrderOnce(input: CreateOrderInput) {
+  const existing = await existingCheckoutResponse(input.checkoutIdempotencyKey);
+  if (existing) return existing;
   if (input.deliveryProvider === "OZON") {
     throw new Error("Этот способ доставки пока недоступен.");
   }
@@ -83,6 +123,7 @@ export async function createOrder(input: CreateOrderInput) {
       const order = await db.order.create({
         data: {
           number: orderNumber(),
+          checkoutIdempotencyKey: input.checkoutIdempotencyKey,
           ...manualOrderState({
             customerHeight: input.customerHeight,
             recommendedLengthCm: recommendation?.lengthCm,
@@ -131,6 +172,7 @@ export async function createOrder(input: CreateOrderInput) {
       const order = await transaction.order.create({
         data: {
           number: orderNumber(),
+          checkoutIdempotencyKey: input.checkoutIdempotencyKey,
           status: paymentPolicy.orderStatus,
           deliveryProvider: "MANUAL",
           deliveryAgreementStatus: paymentPolicy.deliveryAgreementStatus,
@@ -211,6 +253,7 @@ export async function createOrder(input: CreateOrderInput) {
     const order = await transaction.order.create({
       data: {
         number: orderNumber(),
+        checkoutIdempotencyKey: input.checkoutIdempotencyKey,
         status: "AWAITING_PAYMENT",
         customerName: input.customerName,
         phone: input.phone,
@@ -287,6 +330,19 @@ export async function createOrder(input: CreateOrderInput) {
     paymentUrl: result.paymentUrl,
     total: total.toFixed(2),
   };
+}
+
+export async function createOrder(input: CreateOrderInput) {
+  try {
+    return await createOrderOnce(input);
+  } catch (error) {
+    const prismaError = error as { code?: string };
+    if (prismaError?.code === "P2002") {
+      const existing = await existingCheckoutResponse(input.checkoutIdempotencyKey);
+      if (existing) return existing;
+    }
+    throw error;
+  }
 }
 
 export async function createPaymentForAgreedOrder(orderId: string) {

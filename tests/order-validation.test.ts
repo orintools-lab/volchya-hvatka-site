@@ -4,6 +4,7 @@ import { orderSchema, quoteSchema } from "../src/lib/validation/order";
 describe("order validation", () => {
   it("не принимает клиентскую цену товара и доставки как часть контракта", () => {
     const input = {
+      checkoutIdempotencyKey: "ddeb27fb-d9a0-4624-be4d-4615062daed4",
       productId: "product-1",
       deliveryProvider: "CDEK",
       quoteId: "quote-1",
@@ -25,6 +26,7 @@ describe("order validation", () => {
 
   it("требует рост покупателя", () => {
     const result = orderSchema.safeParse({
+      checkoutIdempotencyKey: "ddeb27fb-d9a0-4624-be4d-4615062daed4",
       productId: "product-1",
       deliveryProvider: "MANUAL",
       customerName: "Иван Иванов",
@@ -38,6 +40,7 @@ describe("order validation", () => {
 
   it("позволяет ручную доставку без расчёта и quoteId", () => {
     expect(orderSchema.safeParse({
+      checkoutIdempotencyKey: "ddeb27fb-d9a0-4624-be4d-4615062daed4",
       productId: "product-1",
       deliveryProvider: "MANUAL",
       customerName: "Иван Иванов",
@@ -51,6 +54,7 @@ describe("order validation", () => {
 
   it("не позволяет СДЭК без серверной котировки", () => {
     expect(orderSchema.safeParse({
+      checkoutIdempotencyKey: "ddeb27fb-d9a0-4624-be4d-4615062daed4",
       productId: "product-1",
       deliveryProvider: "CDEK",
       customerName: "Иван Иванов",

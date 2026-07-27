@@ -28,7 +28,16 @@ export async function POST(request: Request) {
     ];
     const message = error instanceof Error && publicMessages.includes(error.message)
       ? error.message
-      : "Не удалось создать заказ. Попробуйте ещё раз или выберите доставку по согласованию.";
+      : "Не удалось оформить заказ. Попробуйте ещё раз. Если ошибка повторится, напишите нам в сообщения сообщества.";
+    const diagnostic = error as { code?: unknown; name?: unknown };
+    console.error("checkout_order_failed", {
+      timestamp: new Date().toISOString(),
+      stage: "order_and_payment_transaction",
+      deliveryProvider: parsed.data.deliveryProvider,
+      productId: parsed.data.productId,
+      errorCode: typeof diagnostic?.code === "string" ? diagnostic.code : "UNKNOWN",
+      errorName: typeof diagnostic?.name === "string" ? diagnostic.name : "Error",
+    });
     return NextResponse.json(
       { error: message },
       { status: 422 },

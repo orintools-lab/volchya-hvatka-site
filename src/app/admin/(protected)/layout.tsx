@@ -28,6 +28,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         <Link href="/admin/faq">FAQ</Link>
         <Link href="/admin/payments">Платежи</Link>
         <Link href="/admin/logs">Логи</Link>
+        <Link href="/health">Состояние системы</Link>
         <Link href="/" target="_blank">Открыть сайт ↗</Link>
       </nav>
       <div><small>{admin.email}</small><form action={logout}><button>Выйти</button></form></div>

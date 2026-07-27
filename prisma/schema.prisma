@@ -315,6 +315,7 @@ model Media {
 model Order {
   id                      String                  @id @default(cuid())
   number                  String                  @unique
+  checkoutIdempotencyKey  String?                 @unique
   customerId              String?
   status                  OrderStatus             @default(NEW)
   customerName            String
