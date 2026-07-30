@@ -25,6 +25,7 @@ import {
   publicPaymentUrl,
 } from "./payment-link";
 import { deliverCourseAfterPayment } from "./digital-delivery-service";
+import { claimSuccessfulRobokassaPayment } from "./payment-result";
 
 const MATERIAL = SHASHKA_MATERIAL;
 
@@ -464,34 +465,15 @@ export async function processRobokassaResult(input: {
   }
 
   const processed = await db.$transaction(async (transaction) => {
-    const claimed = await transaction.payment.updateMany({
-      where: { id: payment.id, status: { not: "SUCCEEDED" } },
-      data: {
-        status: "SUCCEEDED",
-        paidAt: new Date(),
-        payload: isDeliveryPayment ? { ...input.payload, purpose: "DELIVERY" } : input.payload,
-      },
+    return claimSuccessfulRobokassaPayment(transaction, {
+      paymentId: payment.id,
+      orderId: payment.orderId,
+      upsellOfferId: payment.upsellOfferId,
+      invoiceId: input.invoiceId,
+      amount: input.amount,
+      payload: input.payload,
+      isDeliveryPayment,
     });
-    if (claimed.count === 0) return false;
-    await transaction.paymentEvent.create({
-      data: { paymentId: payment.id, externalEventId: `result:${input.invoiceId}`, eventType: "ROBOKASSA_RESULT", payload: input.payload },
-    });
-    if (payment.upsellOfferId) {
-      await transaction.upsellOffer.update({
-        where: { id: payment.upsellOfferId },
-        data: { status: "ACCEPTED", usedAt: new Date() },
-      });
-      await transaction.auditLog.create({
-        data: { action: "UPSELL_PAYMENT_CONFIRMED", entity: "UpsellOffer", entityId: payment.upsellOfferId, after: { invoiceId: input.invoiceId, amount: input.amount } },
-      });
-    } else if (!isDeliveryPayment) {
-      if (!payment.orderId || !payment.order) throw new Error("Заказ платежа не найден.");
-      await transaction.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } });
-      await transaction.auditLog.create({
-        data: { action: "PAYMENT_CONFIRMED", entity: "Order", entityId: payment.orderId, after: { invoiceId: input.invoiceId, amount: input.amount } },
-      });
-    }
-    return true;
   });
   if (!processed) return `OK${input.invoiceId}`;
   if (isDeliveryPayment) return `OK${input.invoiceId}`;
